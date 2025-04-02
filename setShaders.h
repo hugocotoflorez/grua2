@@ -28,26 +28,21 @@ textFileRead(const char *fn)
 
         int count = 0;
 
-        if (fn != NULL)
-        {
+        if (fn != NULL) {
                 fichero = fopen(fn, "rt");
 
-                if (fichero != NULL)
-                {
+                if (fichero != NULL) {
                         fseek(fichero, 0, SEEK_END);
                         count = ftell(fichero);
                         rewind(fichero);
 
-                        if (count > 0)
-                        {
+                        if (count > 0) {
                                 contenido = (char *) malloc(sizeof(char) * (count + 1));
                                 count = fread(contenido, sizeof(char), count, fichero);
                                 contenido[count] = '\0';
                         }
                         fclose(fichero);
-                }
-                else
-                {
+                } else {
                         std::cout << "ERROR::SHADER::FILE_NOT_SUCCESFULLY_READ"
                                   << std::endl;
                         return NULL;
@@ -68,8 +63,7 @@ printShaderInfoLog(GLuint obj)
 
         glGetShaderiv(obj, GL_INFO_LOG_LENGTH, &infologLength);
 
-        if (infologLength > 0)
-        {
+        if (infologLength > 0) {
                 infoLog = (char *) malloc(infologLength);
                 glGetShaderInfoLog(obj, infologLength, &charsWritten, infoLog);
                 printf("%s\n", infoLog);
@@ -86,8 +80,7 @@ printProgramInfoLog(GLuint obj)
 
         glGetProgramiv(obj, GL_INFO_LOG_LENGTH, &infologLength);
 
-        if (infologLength > 0)
-        {
+        if (infologLength > 0) {
                 infoLog = (char *) malloc(infologLength);
                 glGetProgramInfoLog(obj, infologLength, &charsWritten, infoLog);
                 printf("%s\n", infoLog);
@@ -131,6 +124,43 @@ setShaders(const char *nVertx, const char *nFrag)
         // Libero los ficheros
         free(ficherovs);
         free(ficherofs);
+
+        // Copio vertex y Fragment
+        glCompileShader(vertexShader);
+        glCompileShader(fragmentShader);
+
+        // Miro si hay algun error
+        printShaderInfoLog(vertexShader);
+        printShaderInfoLog(fragmentShader);
+
+        // Creo el programa asociado
+        progShader = glCreateProgram();
+
+        // Le attacheo shaders al programa
+        glAttachShader(progShader, vertexShader);
+        glAttachShader(progShader, fragmentShader);
+
+        // Lo linko
+        glLinkProgram(progShader);
+        // A ver si hay errores
+        printProgramInfoLog(progShader);
+
+        return (progShader);
+}
+
+GLuint
+setShaders_str(const char *nVertx, const char *nFrag)
+{
+        GLuint vertexShader, fragmentShader;
+        GLuint progShader;
+
+        // Creo el vertexShader y el FragmentShader
+        vertexShader = glCreateShader(GL_VERTEX_SHADER);
+        fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+
+        // Los cargo
+        glShaderSource(vertexShader, 1, &nVertx, NULL);
+        glShaderSource(fragmentShader, 1, &nFrag, NULL);
 
         // Copio vertex y Fragment
         glCompileShader(vertexShader);

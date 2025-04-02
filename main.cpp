@@ -14,8 +14,16 @@
 |*                                                      *|
 |* ---------------------------------------------------- */
 
+/* || USER OPTIONS || */ /* Enable VSync. FPS limited to screen refresh rate */
+/* || USER OPTIONS || */ /*(0: disable, 1: enable, undef: default) */
+/* || USER OPTIONS || */ #define VSYNC 0
+/* || USER OPTIONS || */
+/* || USER OPTIONS || */ /* Show fps if SHOW_FPS is defined and not 0 */
+/* || USER OPTIONS || */ #define SHOW_FPS 0
+
 /* Todo: refactorizar a little :)
- (>1k lines is not right, right?)*/
+ * (>1k lines is not right, right?)
+ * (1200 after embed shaders) */
 
 #if defined(_WIN32)
 #include "include/glad/glad.h"
@@ -54,10 +62,6 @@ static_assert(0 == "Undefined target");
 using namespace std;
 using namespace glm;
 
-/* Enable VSync. FPS limited to screen refresh rate
- * (0: disable, 1: enable, undef: default) */
-#define VSYNC 0
-
 // Return a RGB normalized coma separeted equivalent color
 #define HexColor(hex_color)                     \
         ((hex_color & 0xFF0000) >> 16) / 256.0, \
@@ -77,6 +81,7 @@ using namespace glm;
 #define Texture(a, b) a, b
 #define Normal(a, b, c) a, b, c
 
+#define $(a) #a "\n"
 
 struct gvopts {
         GLuint vertex_start, vertex_coords;
@@ -119,14 +124,14 @@ typedef struct Object {
 
 Material default_mat = (Material) {
         .name = "Default",
-        .Ns = 0.0f, // Brillo especular (valores comunes: 0-1000)
-        .Ka = { 0.1f, 0.1f, 0.1f }, // Luz ambiental (baja para evitar saturación)
-        .Ks = { 0.4f, 0.4f, 0.4f }, // Reflectividad especular (moderada)
-        .Kd = { 0.8f, 0.8f, 0.8f }, // Color difuso (predeterminado gris claro)
+        .Ns = 200.0f, // Brillo especular
+        .Ka = { 0.1f, 0.1f, 0.1f }, // Luz ambiental
+        .Ks = { 0.4f, 0.4f, 0.4f }, // Reflectividad especular
+        .Kd = { 20.8f, 20.8f, 20.8f }, // Color difuso
         .Ke = { 0.0f, 0.0f, 0.0f }, // Emisión (ninguna)
-        .Ni = 1.0f, // Índice de refracción (1.0 = aire, >1.0 = vidrio, agua, etc.)
-        .d = 1.0f, // Opacidad completa (1.0 = opaco, 0.0 = totalmente transparente)
-        .illum = 2, // Modelo de iluminación Phong (2 = difuso + especular)
+        .Ni = 1.0f, // Índice de refracción
+        .d = 1.0f, // Opacidad
+        .illum = 0,
         .texture = 0,
         .image = 0,
         .height = 0,
@@ -141,7 +146,8 @@ GLuint WIDTH = 640;
 GLuint HEIGHT = 480;
 
 vec3 lightPos = vec3(0.0f, 0.0f, 0.0f); // Posición de la luz en el mundo
-vec3 lightColor = vec3(4.0f, 4.0f, 4.0f); // Blanco
+vec3 lightColor = vec3(1.0f, 1.0f, 1.0f); // Blanco
+float lightIntensity = 8.0f;
 
 unsigned int c_lock = 0;
 float camera_pos_y = 48.0f;
@@ -267,12 +273,12 @@ GLuint
 load_texture(Material &mat)
 {
         if (mat.texture > 0) {
-                printf("Texture loaded yet\n");
+                // printf("Texture loaded yet\n");
                 return mat.texture;
         }
 
         if (mat.image == NULL) {
-                printf("Material has no image data!\n");
+                // printf("Material has no image data!\n");
                 return 0;
         }
         glGenTextures(1, &mat.texture);
@@ -608,7 +614,7 @@ process_input(GLFWwindow *window)
 {
         static float moveSpeed = 0;
         float moveInc = 0.06f * (interframe_time);
-        float moveDec = moveInc / 20;
+        float moveDec = moveInc / 2;
         float cameraSpeed = 6.0f * (interframe_time);
         float rotateSpeed = 1.0f * (interframe_time);
         float maxspeed = 200 * moveInc;
@@ -636,7 +642,7 @@ process_input(GLFWwindow *window)
                         moveSpeed = 0;
                 } else {
                         // printf("SpeedDown %f\n", moveSpeed);
-                        //  move obj
+                        //   move obj
                         objects.at(OBJ_BASE).model = translate(objects.at(OBJ_BASE).model, vec3(moveSpeed, 0, 0));
                         // rotate wheel
                         objects.at(OBJ_WHEEL_FL).model = rotate(objects.at(OBJ_WHEEL_FL).model, moveSpeed, vec3(0, 0, -1));
@@ -657,7 +663,7 @@ process_input(GLFWwindow *window)
                                 ;
                 } else {
                         moveSpeed = 100 * moveInc;
-                        //printf("SpeedUp Reverse %f\n", moveSpeed);
+                        // printf("SpeedUp Reverse %f\n", moveSpeed);
                         objects.at(OBJ_BASE).model = translate(objects.at(OBJ_BASE).model, vec3(-moveSpeed, 0, 0));
                         // rotate wheel
                         objects.at(OBJ_WHEEL_FL).model = rotate(objects.at(OBJ_WHEEL_FL).model, moveSpeed, vec3(0, 0, 1));
@@ -753,6 +759,8 @@ __framebuffer_size_callback(GLFWwindow *window, int width, int height)
         glViewport(0, 0, width, height);
 }
 
+
+mat4 view;
 void
 set_camera(Object &object)
 {
@@ -761,7 +769,6 @@ set_camera(Object &object)
         vec3 cameraUp;
         mat4 m;
         vec3 dirf;
-        mat4 view;
         GLuint viewLoc = glGetUniformLocation(object.shader_program, "view");
         GLuint projectionLoc = glGetUniformLocation(object.shader_program, "projection");
         mat4 projection = perspective(radians(45.0f), (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
@@ -804,9 +811,11 @@ set_light(Object &object)
         vec3 local_light_pos = vec3(0.0f, 0.0f, 0.0f); // Posición relativa dentro del objeto
         lightPos = vec3(model * vec4(local_light_pos, 1.0f)); // Aplicar la transformación completa
         vec3 dirf = normalize(vec3(model[0]));
+        vec3 viewPos = get_model_relative_position(view);
         // printf("Light pos: %f, %f, %f\n", lightPos.x, lightPos.y, lightPos.z);
         glUniform3fv(glGetUniformLocation(object.shader_program, "lightPos"), 1, value_ptr(lightPos));
-        glUniform3fv(glGetUniformLocation(object.shader_program, "lightColor"), 1, value_ptr(lightColor));
+        glUniform3fv(glGetUniformLocation(object.shader_program, "viewPos"), 1, value_ptr(viewPos));
+        glUniform3fv(glGetUniformLocation(object.shader_program, "lightColor"), 1, value_ptr(lightColor * lightIntensity));
         glUniform3fv(glGetUniformLocation(object.shader_program, "Ka"), 1, object.material.Ka);
         glUniform3fv(glGetUniformLocation(object.shader_program, "Ks"), 1, object.material.Ks);
         glUniform3fv(glGetUniformLocation(object.shader_program, "Kd"), 1, object.material.Kd);
@@ -815,12 +824,14 @@ set_light(Object &object)
         glUniform1f(glGetUniformLocation(object.shader_program, "Ni"), object.material.Ni);
         glUniform1f(glGetUniformLocation(object.shader_program, "d"), object.material.d);
         glUniform3fv(glGetUniformLocation(object.shader_program, "lightDir"), 1, value_ptr(dirf));
+        glUniform1i(glGetUniformLocation(object.shader_program, "useTexture"), object.material.texture != 0);
         float angle = glm::radians(90.0f); // Ángulo de apertura del spotlight
         float cosineCutoff = sin(angle);
 
         // printf("Light Direction (dirf): %f, %f, %f\n", dirf.x, dirf.y, dirf.z);
         glUniform1f(glGetUniformLocation(object.shader_program, "cosineCutoff"), cosineCutoff);
-        glShadeModel(GL_SMOOTH);
+        /* Not suported in windows? */
+        // glShadeModel(GL_SMOOTH);
 }
 
 
@@ -840,10 +851,10 @@ set_texture_n_color(Object &object)
                 glActiveTexture(GL_TEXTURE0);
                 glUniform1i(textureLoc, 0);
                 glBindTexture(GL_TEXTURE_2D, object.material.texture);
+
         } else if (object.material.texture != 0) {
-                glUniform1i(textureLoc, -1);
-                printf("Texture %d failed!\n", object.material.texture);
-                exit(0);
+                // printf("Texture %d failed!\n", object.material.texture);
+                // exit(object.material.texture);
         }
 }
 
@@ -935,12 +946,15 @@ fps()
         ++fps;
 
         interframe_time = tp.tv_sec - last_tp.tv_sec + (tp.tv_nsec - last_tp.tv_nsec) * 1e-9;
+        // printf("interframe_time: %f\n", interframe_time);
 
         last_tp = tp;
 
         if (t - last_time >= 1) {
                 last_time = t;
+#if defined(SHOW_FPS) && SHOW_FPS
                 printf("[FPS] %u\n", fps);
+#endif
                 fps = 0;
         }
 }
@@ -951,8 +965,8 @@ mainloop(GLFWwindow *window)
 {
         /* Execute until window is closed */
         while (!glfwWindowShouldClose(window)) {
-                fps();
                 process_input(window);
+                fps();
 
                 glClearColor(BG_COLOR);
                 glClear(GL_COLOR_BUFFER_BIT);
@@ -975,36 +989,121 @@ mainloop(GLFWwindow *window)
         return 0;
 }
 
+static const char vertex_shader_color[] =
+$(#version 330 core)
+
+$(layout(location = 0) in vec3 aPos;)
+$(layout(location = 1) in vec2 aTexCoord;)
+$(layout(location = 2) in vec3 aNormal;)
+
+$(uniform mat4 model;)
+$(uniform mat4 view;)
+$(uniform mat4 projection;)
+$(uniform vec3 lightDir;)
+
+$(out vec2 TexCoord;)
+$(out vec3 FragPos;)
+$(out vec3 Normal;)
+$(out vec3 lightDirection;)
+
+$(void main())
+$({ )
+    $(gl_Position = projection * view * model * vec4(aPos, 1.0);)
+    $(FragPos = vec3(model * vec4(aPos, 1.0));)
+    $(TexCoord = aTexCoord;)
+
+    $(lightDirection = normalize(lightDir);)
+    $( }) "\0";
+
+static const char fragment_shader_color[] =
+$(#version 330 core)
+
+$(in vec3 FragPos;)
+$(in vec2 TexCoord;)
+$(in vec3 lightDirection;)
+$(out vec4 FragColor;)
+
+$(uniform vec3 lightPos;)
+$(uniform vec3 lightColor;)
+$(uniform vec3 Ka;)
+$(uniform vec3 Kd;)
+$(uniform vec3 viewPos;)
+$(uniform vec3 color;)
+$(uniform sampler2D texture1;)
+$(uniform float cosineCutoff;)
+$(uniform int useTexture;)
+
+$(void)
+$(main())
+$({ )
+
+    $(vec3 dX = dFdx(FragPos);)
+    $(vec3 dY = dFdy(FragPos);)
+    $(vec3 norm = normalize(cross(dX, dY));)
+
+    $(float ambientStrength = 0.3;)
+    $(vec3 ambient = ambientStrength * lightColor;)
+    $(vec3 light = ambient * Ka;)
+
+    $(vec3 lightDirNorm = normalize(lightPos - FragPos);)
+
+    $(float distance = length(lightPos - FragPos);)
+
+    $(float Kc = 0.1;)
+    $(float Kl = 0.02;)
+    $(float Kq = 0.032;)
+
+    $(float attenuation = 1.0 /(Kc + Kl * distance + Kq *(distance * distance));)
+
+    $(float falloffFactor = 2.0;)
+    $(float centerIntensity = pow(max(dot(norm, lightDirNorm), 0.0), falloffFactor);)
+
+    $(vec3 fd = normalize(FragPos - lightPos);)
+    $(if (acos(dot(fd, lightDirection))<radians(15.0)))
+    $({ )
+        $(float diff = max(dot(norm, lightDirNorm), 0.0);)
+        $(vec3 diffuse = diff * Kd * attenuation * lightColor;)
+        $(light += diffuse;)
+
+        $(float specularStrength = 0.5;)
+        $(vec3 viewDir = normalize(viewPos - FragPos);)
+        $(vec3 reflectDir = reflect(- lightDirNorm, norm);)
+        $(float spec = pow(max(dot(viewDir, reflectDir), 0.0), 64);)
+        $(vec3 specular = specularStrength * spec * lightColor * attenuation;)
+        /*$(light +=specular;)*/
+
+        $( })
+
+    $(if (useTexture == 1))
+    $({ )
+        $(FragColor = vec4(light * color, 1.0) * texture(texture1, TexCoord);)
+        $( })
+    $(else)
+    $({ )
+        $(FragColor = vec4(light * color, 1.0);)
+        $( })
+    $( }) "\n\0";
+
+
 void
 init_objects()
 {
-        GLuint shader_program_texture = setShaders("vertex_shader_light.glsl", "fragment_shader_light.glsl");
-        GLuint shader_program_color = setShaders("vertex_shader.glsl", "fragment_shader.glsl");
-        assert(shader_program_texture > 0);
-        assert(shader_program_color > 0);
+        GLuint shader_program = setShaders_str(vertex_shader_color, fragment_shader_color);
+        assert(shader_program > 0);
 
-        use_global_shader(shader_program_texture);
+        use_global_shader(shader_program);
 
         new_object("ground", get_ground_vao);
         new_object("base", get_base_vao);
         new_object("head", get_head_vao);
-
-        use_global_shader(shader_program_color);
-
         new_object("wheel_fl", get_wheel_vao, 0x444444);
         new_object("wheel_fr", get_wheel_vao, 0x444444);
         new_object("wheel_bl", get_wheel_vao, 0x444444);
         new_object("wheel_br", get_wheel_vao, 0x444444);
-
-        use_global_shader(shader_program_texture);
-
         new_object("circle_base", get_circle_base_vao);
         new_object("circle", get_circle_vao);
         new_object("palo", get_palo_vao);
-
-        use_global_shader(shader_program_color);
-
-        new_object("A", get_A_vao, 0xAAAAAA);
+        new_object("A", get_A_vao, 0xAACC00);
         new_object("Light Spot", get_lightspot_vao, 0xFFFFFF, false);
 
         add_material_image("./textures/StripedAsphalt/Striped_Asphalt_ufoidcskw_1K_BaseColor.jpg",
@@ -1090,7 +1189,6 @@ main(int argc, char **argv)
 
         glfwMakeContextCurrent(window);
         glfwSetFramebufferSizeCallback(window, __framebuffer_size_callback);
-
 #if defined(VSYNC)
         glfwSwapInterval(VSYNC);
 #endif
@@ -1104,7 +1202,10 @@ main(int argc, char **argv)
         glfwSetCursorPosCallback(window, mouse_callback);
 
         /* Mouse stuff */
+
+#if !defined(_WIN32) /* Why windows, why? */
         if (glfwRawMouseMotionSupported())
+#endif
                 glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
