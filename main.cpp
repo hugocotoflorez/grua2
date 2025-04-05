@@ -53,6 +53,8 @@ static_assert(0 == "Undefined target");
 #include <ctime>
 #include <vector>
 
+#include "thirdparty/frog/frog.h"
+
 #include "setShaders.h"
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -400,14 +402,14 @@ sphere(GLuint *VAO, GLuint *indexes_n, float radius)
         generateSphere(radius, 10, 10, vertices, indices);
         *indexes_n = indices.size();
 
-        struct gvopts opts = (struct gvopts) {
-                .vertex_start = 0,
-                .vertex_coords = 3,
-                .padd = 3,
-                .use_vertex = true,
-                .use_texture = false,
-                .use_normal = false,
-        };
+        struct gvopts opts;
+        opts.vertex_start = 0;
+        opts.vertex_coords = 3;
+        opts.padd = 3;
+        opts.use_vertex = true;
+        opts.use_texture = false;
+        opts.use_normal = false;
+
         gen_vao(VAO, vertices.size(), vertices.data(), indices.size(), indices.data(), opts);
 }
 
@@ -432,16 +434,16 @@ square(GLuint *VAO, GLuint *indexes_n, float x, float texture_scale = 1, float r
 
         *indexes_n = SIZE(indices);
 
-        struct gvopts opts = (struct gvopts) {
-                .vertex_start = 0,
-                .vertex_coords = 3,
-                .texture_start = 3,
-                .texture_coords = 2,
-                .padd = 5,
-                .use_vertex = true,
-                .use_texture = true,
-                .use_normal = false,
-        };
+        struct gvopts opts;
+        opts.vertex_start = 0;
+        opts.vertex_coords = 3;
+        opts.texture_start = 3;
+        opts.texture_coords = 2;
+        opts.padd = 5;
+        opts.use_vertex = true;
+        opts.use_texture = true;
+        opts.use_normal = false;
+
         gen_vao(VAO, SIZE(vertices), vertices, SIZE(indices), indices, opts);
 }
 
@@ -449,7 +451,6 @@ square(GLuint *VAO, GLuint *indexes_n, float x, float texture_scale = 1, float r
 static void
 cube_textured(GLuint *VAO, GLuint *indexes_n, float x, float y, float z, float texture_scale = 1, float relation = 1)
 {
-        GLuint VBO, EBO;
         /*                                       | y
      0(-x,y,-z)-> /---------/|<- (x,y,-z)4       |
                  / |       / |                   |______ x
@@ -488,16 +489,16 @@ cube_textured(GLuint *VAO, GLuint *indexes_n, float x, float y, float z, float t
         };
 
         *indexes_n = SIZE(indices);
-        struct gvopts opts = (struct gvopts) {
-                .vertex_start = 0,
-                .vertex_coords = 3,
-                .texture_start = 3,
-                .texture_coords = 2,
-                .padd = 5,
-                .use_vertex = true,
-                .use_texture = true,
-                .use_normal = false,
-        };
+        struct gvopts opts;
+        opts.vertex_start = 0;
+        opts.vertex_coords = 3;
+        opts.texture_start = 3;
+        opts.texture_coords = 2;
+        opts.padd = 5;
+        opts.use_vertex = true;
+        opts.use_texture = true;
+        opts.use_normal = false;
+
         gen_vao(VAO, SIZE(vertices), vertices, SIZE(indices), indices, opts);
 }
 
@@ -505,7 +506,6 @@ cube_textured(GLuint *VAO, GLuint *indexes_n, float x, float y, float z, float t
 static void
 cube(GLuint *VAO, GLuint *indexes_n, float x, float y, float z)
 {
-        GLuint VBO, EBO;
         /*                                       | y
      0(-x,y,-z)-> /---------/|<- (x,y,-z)4       |
                  / |       / |                   |______ x
@@ -515,7 +515,6 @@ cube(GLuint *VAO, GLuint *indexes_n, float x, float y, float z)
                |  /      |  /
                | /       | /
   3(-x,-y,z)-> |/________|/ <- (x,-y,z)7
-
 
         */
 
@@ -544,14 +543,15 @@ cube(GLuint *VAO, GLuint *indexes_n, float x, float y, float z)
         };
 
         *indexes_n = SIZE(indices);
-        struct gvopts opts = (struct gvopts) {
-                .vertex_start = 0,
-                .vertex_coords = 3,
-                .padd = 3,
-                .use_vertex = true,
-                .use_texture = false,
-                .use_normal = false,
-        };
+
+        struct gvopts opts;
+        opts.vertex_start = 0;
+        opts.vertex_coords = 3;
+        opts.padd = 3;
+        opts.use_vertex = true;
+        opts.use_texture = false;
+        opts.use_normal = false;
+
         gen_vao(VAO, SIZE(vertices), vertices, SIZE(indices), indices, opts);
 }
 
@@ -658,9 +658,9 @@ process_input(GLFWwindow *window)
                         moveSpeed -= moveDec;
                         if ((moveSpeed) < 0)
                                 moveSpeed = 0;
-                        else
+                        else {
                                 // printf("SpeedDown %f\n", moveSpeed);
-                                ;
+                        }
                 } else {
                         moveSpeed = 100 * moveInc;
                         // printf("SpeedUp Reverse %f\n", moveSpeed);
@@ -838,8 +838,8 @@ set_light(Object &object)
 void
 set_texture_n_color(Object &object)
 {
-        GLuint colorLoc;
-        GLuint textureLoc;
+        GLint colorLoc;
+        GLint textureLoc;
         colorLoc = glGetUniformLocation(object.shader_program, "color");
         textureLoc = glGetUniformLocation(object.shader_program, "texture1");
         if (colorLoc != -1)
@@ -900,20 +900,20 @@ mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
 {
         static bool firstMouse = true;
         static float lastX;
-        static float lastY;
+        //static float lastY;
         float xpos = static_cast<float>(xposIn);
-        float ypos = static_cast<float>(yposIn);
+        //float ypos = static_cast<float>(yposIn);
         if (firstMouse) {
                 lastX = xpos;
-                lastY = ypos;
+                //lastY = ypos;
                 firstMouse = false;
         }
 
         float xoffset = xpos - lastX;
-        float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
+        //float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
 
         lastX = xpos;
-        lastY = ypos;
+        //lastY = ypos;
 
         float rotateSpeed = 0.01f;
 
@@ -936,7 +936,7 @@ fps()
         static unsigned int fps = 0;
         time_t t;
         struct timespec tp;
-        static struct timespec last_tp = { 0 };
+        static struct timespec last_tp = { 0, 0 };
 
         if (clock_gettime(CLOCK_REALTIME, &tp) < 0)
                 return;
@@ -1166,7 +1166,7 @@ init_objects()
 
 /* Entry point: Initialize stuff and then enter mainloop. */
 int
-main(int argc, char **argv)
+main()
 {
         if (!glfwInit()) {
                 fprintf(stderr, "Can not init glfw\n");
@@ -1222,6 +1222,7 @@ main(int argc, char **argv)
         init_objects();
 
         mainloop(window);
+        glfwDestroyWindow(window);
         glfwTerminate();
 
         return 0;

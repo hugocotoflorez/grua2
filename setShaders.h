@@ -6,7 +6,7 @@
 #ifdef _MSC_VER
 #define _CRT_SECURE_NO_WARNINGS // Evitamos alguno errores de funciones no seguras
 #endif
-#pragma warning(disable : 4996) // Evitamos alguno errores de funciones no seguras
+
 
 // Librerias necesarias
 #include "include/glad/glad.h"
