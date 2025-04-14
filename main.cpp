@@ -1,38 +1,16 @@
-/* Grua (texturas + iluminacion). Practica COGA 2025    *|
-|* ---------------------------------------------------- *|
-|* Autores:                                             *|
-|*      Hugo Coto Florez                                *|
-|*      Guillermo Fernandez                             *|
-|*                                                      *|
-|* License: licenseless                                 *|
-|*                                                      *|
-|* Mensaje del autor: No me hago responsable            *|
-|* de la perdida de cordura por parte del lector        *|
-|* ni actividades de escasa legitimidad que             *|
-|* puedan ocasionarse total o parcialmente tras         *|
-|* haber intentado entender este codigo. Un abrazo.     *|
-|*                                                      *|
-|* ---------------------------------------------------- */
+/* Freedoom
+ *
+ * Author: Hugo Coto Florez
+ */
 
-/* || USER OPTIONS || */ /* Enable VSync. FPS limited to screen refresh rate */
-/* || USER OPTIONS || */ /*(0: disable, 1: enable, undef: default) */
-/* || USER OPTIONS || */ #define VSYNC 0
-/* || USER OPTIONS || */
-/* || USER OPTIONS || */ /* Show fps if SHOW_FPS is defined and not 0 */
-/* || USER OPTIONS || */ #define SHOW_FPS 0
+/* Enable VSync. FPS limited to screen refresh rate
+ * (0: disable, 1: enable, undef: default) */
+#define VSYNC 0
 
-/* Todo: refactorizar a little :)
- * (>1k lines is not right, right?)
- * (1200 after embed shaders) */
+/* Show fps if SHOW_FPS is defined and not 0 */
+#define SHOW_FPS 0
 
-#if defined(_WIN32)
-#include "include/glad/glad.h"
-
-#include "include/glfw/include/GLFW/glfw3.h"
-#include "include/glm/ext.hpp"
-#include "include/glm/glm.hpp"
-
-#elif defined(linux)
+#if defined(linux)
 #include <glad/glad.h>
 
 #include <GL/gl.h>
@@ -42,7 +20,7 @@
 #include <glm/glm.hpp>
 
 #else
-static_assert(0 == "Undefined target");
+static_assert(0, "Undefined target");
 #endif
 
 #include <cassert>
@@ -53,7 +31,7 @@ static_assert(0 == "Undefined target");
 #include <ctime>
 #include <vector>
 
-#include "thirdparty/frog/frog.h"
+// #include "../thirdparty/frog/frog.h"
 
 #include "setShaders.h"
 
@@ -70,8 +48,7 @@ using namespace glm;
         ((hex_color & 0xFF00) >> 8) / 256.0,    \
         ((hex_color & 0xFF)) / 256.0
 
-// #define BG_COLOR HexColor(0x87CEEB), 1.0
-#define BG_COLOR HexColor(0x000000), 1.0
+#define BG_COLOR HexColor(0x87CEEB), 1.0
 
 #define PI 3.1416f
 #define PIMED 1.5708f
@@ -85,75 +62,17 @@ using namespace glm;
 
 #define $(a) #a "\n"
 
-struct gvopts {
-        GLuint vertex_start, vertex_coords;
-        GLuint texture_start, texture_coords;
-        GLuint normal_start, normal_coords;
-        GLuint padd;
-        bool use_vertex, use_texture, use_normal;
-};
-
-typedef struct Material {
-        const char *name;
-        float Ns; // Brillo especular
-        float Ka[3]; // Color de la luz ambiental
-        float Ks[3]; // Specular
-        float Kd[3]; // Diffuse Reflectivity
-        float Ke[3]; // Color de emision
-        float Ni; // indice de refraccion
-        float d; // transparencia
-        int illum; // modelo de iluminacion
-        unsigned int texture;
-        unsigned char *image;
-        int height;
-        int width;
-        int comp;
-        unsigned int id;
-} Material;
-
-typedef struct Object {
-        const char *name;
-        GLuint vao;
-        GLuint indexes_n;
-        GLuint printable;
-        int color;
-        GLuint shader_program;
-        mat4 model; // relative model
-        vector<Object *> attached;
-        Object *parent;
-        Material material;
-} Object;
-
-Material default_mat = (Material) {
-        .name = "Default",
-        .Ns = 200.0f, // Brillo especular
-        .Ka = { 0.1f, 0.1f, 0.1f }, // Luz ambiental
-        .Ks = { 0.4f, 0.4f, 0.4f }, // Reflectividad especular
-        .Kd = { 20.8f, 20.8f, 20.8f }, // Color difuso
-        .Ke = { 0.0f, 0.0f, 0.0f }, // Emisión (ninguna)
-        .Ni = 1.0f, // Índice de refracción
-        .d = 1.0f, // Opacidad
-        .illum = 0,
-        .texture = 0,
-        .image = 0,
-        .height = 0,
-        .width = 0,
-        .comp = 0,
-        .id = 0,
-};
-
-vector<Object> objects;
-
 GLuint WIDTH = 640;
 GLuint HEIGHT = 480;
 
 vec3 lightPos = vec3(0.0f, 0.0f, 0.0f); // Posición de la luz en el mundo
 vec3 lightColor = vec3(1.0f, 1.0f, 1.0f); // Blanco
-float lightIntensity = 8.0f;
+float lightIntensity = 4.0f;
 
 unsigned int c_lock = 0;
 float camera_pos_y = 48.0f;
 float camera_pos_x = 24.0f;
+vec3 cameraPosition = vec3(0, 0, 0);
 
 /* As vel = vel_base / prev_fps,
  * if prev_fps is 0 in the first second
@@ -180,7 +99,18 @@ typedef enum {
         OBJ_SPHERE,
         OBJ_PALO,
         OBJ_A,
-        OBJ_LIGHT_SPOT,
+        OBJ_LIGHT_SPOT1,
+        OBJ_LIGHT_SPOT2,
+        OBJ_TREE1,
+        OBJ_TREE2,
+        OBJ_TREE3,
+        OBJ_TREE4,
+        OBJ_TREE5,
+        OBJ_TREE6,
+        OBJ_TREE7,
+        OBJ_TREE8,
+        OBJ_TREE9,
+        OBJ_TREE10,
 } ObjectsId;
 
 static GLuint
@@ -188,69 +118,399 @@ use_global_shader(GLuint shader = 0)
 {
         static GLuint global_shader = 0;
         if (shader) {
-                // printf("Set global shader to %d\n", shader);
+                // printf("Using shader %d\n", shader);
                 global_shader = shader;
         }
 
         return global_shader;
 }
 
-static inline vec3
-get_model_relative_position(mat4 model)
-{
-        return vec3(model[3]);
-}
 
-static mat4
-get_obj_absolute_model(Object obj)
+struct gvopts {
+        GLuint vertex_start, vertex_coords;
+        GLuint texture_start, texture_coords;
+        GLuint normal_start, normal_coords;
+        GLuint padd;
+        bool use_vertex, use_texture, use_normal;
+};
+
+class Material
 {
-        if (obj.parent) {
-                return get_obj_absolute_model(*obj.parent) * obj.model;
-        } else {
-                return obj.model;
+    public:
+        const char *name;
+        float Ns = 200.0f; // Brillo especular
+        float Ka[3] = { 0.2f, 0.2f, 0.2f }; // Luz ambiental
+        float Ks[3] = { 0.4f, 0.4f, 0.4f }; // Reflectividad especular
+        float Kd[3] = { 20.8f, 20.8f, 20.8f }; // Color difuso
+        float Ke[3] = { 0.0f, 0.0f, 0.0f }; // Emisión (ninguna)
+        float Ni = 1.0f; // Índice de refracción
+        float d = 1.0f; // Opacidad
+        unsigned int illum = 0;
+        unsigned int texture = 0;
+        unsigned char *image = NULL;
+        int height = 0;
+        int width = 0;
+        int comp = 0;
+        unsigned int id = 0;
+
+        Material(const char *name = "default") : name(name)
+        {
         }
-}
 
-static inline vec3
-get_obj_absolute_position(Object obj)
+        GLuint
+        load_texture(int how = 0)
+        {
+                if (texture > 0) {
+                        // printf("Texture loaded yet\n");
+                        return texture;
+                }
+
+                if (image == NULL) {
+                        // printf("Material has no image data!\n");
+                        return 0;
+                }
+                // printf("loading texture\n");
+                glGenTextures(1, &texture);
+                glBindTexture(GL_TEXTURE_2D, texture);
+
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, how ?: GL_REPEAT);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, how ?: GL_REPEAT);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+                assert(width > 0 && height > 0);
+
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);
+                glGenerateMipmap(GL_TEXTURE_2D);
+
+                glBindTexture(GL_TEXTURE_2D, 0);
+
+                assert(texture > 0);
+                // printf("texture loaded\n");
+                return texture;
+        }
+
+        void
+        add_material_image(const char *path, int how = 0)
+        {
+                stbi_set_flip_vertically_on_load(1);
+
+                image = stbi_load(path, &width, &height, &comp, STBI_rgb_alpha);
+
+                if (image == NULL) {
+                        fprintf(stderr, "Failed to load texture '%s'\n", path);
+                        exit(0);
+                }
+                load_texture(how);
+                stbi_image_free(image);
+        }
+};
+
+void set_camera(int);
+
+class Object
 {
-        return get_model_relative_position(get_obj_absolute_model(obj));
-}
+    private:
+        const char *name;
+        GLuint vao = 0;
+        GLuint indexes_n = 0;
+        bool printable;
+        int color;
+        mat4 model; // relative model
+        mat4 default_model; // default starting relative model
+        vector<Object *> attached;
+        Object *parent;
+        Material material;
+        unsigned int shader_program;
+        void (*get_vao)(GLuint *, GLuint *);
+        void (*before_draw)(Object *);
 
-static inline mat3
-get_model_rotation_matrix(mat4 model)
+    public:
+        Object(const char *name, void (*get_vao_func)(GLuint *, GLuint *),
+               int _color = 0xFFFFFF,
+               bool _printable = true)
+        : name(name),
+          color(_color),
+          printable(_printable),
+          get_vao(get_vao_func),
+          material(Material()),
+          attached(),
+          parent(nullptr),
+          model(mat4(1.0f)),
+          default_model(mat4(1.0f))
+        {
+                shader_program = use_global_shader(0);
+        }
+
+        void show()
+        {
+                printable = true;
+        }
+
+        void hide()
+        {
+                printable = false;
+        }
+
+        const char *get_name()
+        {
+                return name;
+        }
+
+        Material get_material()
+        {
+                return material;
+        }
+
+        void set_material(Material _material)
+        {
+                material = _material;
+        }
+
+        vec3
+        get_position()
+        {
+                return vec3(model[3]);
+        }
+
+        mat4
+        get_absolute_model()
+        {
+                if (parent) {
+                        return parent->get_absolute_model() * model;
+                }
+                return model;
+        }
+
+        vec3
+        get_obj_absolute_position()
+        {
+                return vec3(get_absolute_model()[3]);
+        }
+
+        mat3
+        get_rotation_matrix()
+        {
+                return mat3(model);
+        }
+
+        Object *
+        add_material_image(const char *path, int how = 0)
+        {
+                material.add_material_image(path, how);
+                return this;
+        }
+
+        vec3
+        get_rotation()
+        {
+                return eulerAngles(quat_cast(mat3(model)));
+        }
+
+        mat3 get_default_rotation_matrix()
+        {
+                return mat3(default_model);
+        }
+
+        mat4 get_model()
+        {
+                return model;
+        }
+
+        void set_model(mat4 _model)
+        {
+                model = _model;
+        }
+
+        void set_before_draw(void (*_before_draw)(Object *))
+        {
+                before_draw = _before_draw;
+        }
+
+        unsigned int get_shader()
+        {
+                return shader_program;
+        }
+
+        Object *rotate(float angle, vec3 v)
+        {
+                model = glm::rotate(model, angle, v);
+                return this;
+        }
+
+        Object *translate(vec3 v)
+        {
+                model = glm::translate(model, v);
+                return this;
+        }
+
+        Object *push(vector<Object *> *objs)
+        {
+                objs->push_back(this);
+                return this;
+        }
+
+        void
+        look_at(vec3 view_pos)
+        {
+                vec3 obj_pos = get_position();
+                mat3 rotation = get_default_rotation_matrix();
+                vec3 dir = normalize(vec3(view_pos.x - obj_pos.x, 0.0, view_pos.z - obj_pos.z));
+                float angle = atan2(dir.x, dir.z);
+                mat4 _model = mat4(1.0f);
+                _model = glm::translate(_model, obj_pos);
+                _model = glm::rotate(_model, angle, vec3(0.0, 1.0, 0.0));
+                _model *= mat4(rotation);
+                model = _model;
+        }
+
+        void
+        set_texture_n_color()
+        {
+                GLint colorLoc;
+                GLint textureLoc;
+                colorLoc = glGetUniformLocation(shader_program, "color");
+                textureLoc = glGetUniformLocation(shader_program, "texture1");
+                if (colorLoc != -1)
+                        glUniform3f(colorLoc, HexColor(color));
+
+                glUniform1i(glGetUniformLocation(shader_program, "useTexture"), material.texture != 0);
+                if (textureLoc != -1 && glIsTexture(material.texture)) {
+                        // printf("Using texture %d\n",material.texture);
+                        glEnable(GL_TEXTURE_2D);
+                        glActiveTexture(GL_TEXTURE0);
+                        glUniform1i(textureLoc, 0);
+                        glBindTexture(GL_TEXTURE_2D, material.texture);
+
+                } else if (material.texture != 0) {
+                        // printf("Texture %d failed!\n", object.material.texture);
+                        // exit(object.material.texture);
+                }
+        }
+
+        void
+        draw_object(mat4 _model = mat4(1.0f))
+        {
+                static GLuint active_shader = 0;
+                GLuint modelLoc;
+
+                // printf("In draw_object\n");
+
+                // get obj model
+                _model = _model * model;
+
+                // printf("1\n");
+                // printf("vector length: %zd\n", attached.size());
+                for (Object *attached_obj : attached) {
+                        assert(attached_obj != nullptr);
+                        // printf("Attached object: %s\n", (*attached_obj).get_name());
+                        (*attached_obj).draw_object(_model);
+                }
+                // printf("2\n");
+
+                if (!printable)
+                        return;
+
+                if (before_draw) {
+                        before_draw(this);
+                }
+
+                if (active_shader != shader_program) {
+                        // printf("Shader set to %d\n", shader_program);
+                        glUseProgram(shader_program);
+                        active_shader = shader_program;
+                }
+                // printf("4\n");
+
+                set_camera(shader_program);
+                // printf("5\n");
+                set_texture_n_color();
+                // printf("6\n");
+
+                modelLoc = glGetUniformLocation(shader_program, "model");
+                glUniformMatrix4fv(modelLoc, 1, GL_FALSE, value_ptr(_model));
+
+                glBindVertexArray(vao);
+                glDrawElements(GL_TRIANGLES, indexes_n, GL_UNSIGNED_INT, 0);
+
+                glBindVertexArray(0);
+                glBindTexture(GL_TEXTURE_2D, 0);
+                // printf("7\n");
+        }
+
+        void
+        attach(Object *child)
+        {
+                if (child->parent)
+                        return;
+                // printf("Vec Size before attach: %zd\n", attached.size());
+                attached.push_back(child);
+                child->parent = this;
+                // printf("Vec Size after attach: %zd\n", attached.size());
+        }
+
+        void
+        set_before_draw(Object *obj, void (*func)(Object *))
+        {
+                obj->before_draw = func;
+        }
+
+        void delete_vao()
+        {
+                glDeleteVertexArrays(1, &vao);
+        }
+
+        Object *init()
+        {
+                get_vao(&vao, &indexes_n);
+                default_model = model;
+                return this;
+        }
+};
+
+
+vector<Object *> objects;
+
+void
+set_camera(int shader)
 {
-        return mat3(model);
-}
+        vec3 cameraEye;
+        vec3 cameraUp;
+        mat4 m;
+        vec3 dirf;
+        mat4 view;
+        GLuint viewLoc = glGetUniformLocation(shader, "view");
+        GLuint projectionLoc = glGetUniformLocation(shader, "projection");
+        mat4 projection = perspective(radians(45.0f), (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
 
-static inline vec3
-get_model_rotation(mat4 model)
-{
-        return eulerAngles(quat_cast(mat3(model)));
-}
+        switch (VIEW) {
+        case VIEW_NOFOLLOW:
+                cameraEye = vec3(0, 0, 0);
+                cameraPosition = vec3(camera_pos_x, camera_pos_y, 0);
+                cameraUp = vec3(0.0f, 1.0f, 0.0f);
+                break;
 
-// Add a new objetc to global obj array
-static void
-new_object(const char *name, void (*get_vao)(GLuint *, GLuint *),
-           int color = 0xFFFFFF, // white by default
-           bool printable = 1) // printable by default
-{
-        GLuint vao, indexes_n;
-        get_vao(&vao, &indexes_n);
+        case VIEW_3_PERSON:
+                m = objects.at(OBJ_BASE)->get_absolute_model();
+                dirf = normalize(vec3(m[0]));
+                cameraEye = objects.at(OBJ_BASE)->get_obj_absolute_position();
+                cameraPosition = cameraEye - dirf * camera_pos_x + vec3(0.0f, camera_pos_y, 0.0f);
+                cameraUp = vec3(m[1]);
+                break;
 
-        objects.push_back(
-        (Object) {
-        .name = name,
-        .vao = vao,
-        .indexes_n = indexes_n,
-        .printable = printable,
-        .color = color,
-        .shader_program = use_global_shader(0),
-        .model = mat4(1.0f),
-        .attached = vector<Object *>(),
-        .parent = NULL,
-        .material = default_mat,
-        });
+        case VIEW_1_PERSON:
+                m = objects.at(OBJ_HEAD)->get_absolute_model();
+                cameraPosition = vec3(m[3]);
+                dirf = normalize(vec3(m[0]));
+                cameraEye = cameraPosition + dirf;
+                cameraUp = vec3(objects.at(OBJ_BASE)->get_model()[1]);
+                break;
+        }
+
+        view = lookAt(cameraPosition, cameraEye, cameraUp);
+
+        glUniformMatrix4fv(viewLoc, 1, GL_FALSE, value_ptr(view));
+        glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, value_ptr(projection));
 }
 
 static inline void
@@ -271,51 +531,6 @@ show_help()
         printf("[right]: Alejar la camara\n");
 }
 
-GLuint
-load_texture(Material &mat)
-{
-        if (mat.texture > 0) {
-                // printf("Texture loaded yet\n");
-                return mat.texture;
-        }
-
-        if (mat.image == NULL) {
-                // printf("Material has no image data!\n");
-                return 0;
-        }
-        glGenTextures(1, &mat.texture);
-        glBindTexture(GL_TEXTURE_2D, mat.texture);
-
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-        assert(mat.width > 0 && mat.height > 0);
-
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, mat.width, mat.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, mat.image);
-        glGenerateMipmap(GL_TEXTURE_2D);
-
-        glBindTexture(GL_TEXTURE_2D, 0);
-
-        assert(mat.texture > 0);
-        return mat.texture;
-}
-
-void
-add_material_image(const char *str, Material &material)
-{
-        stbi_set_flip_vertically_on_load(1);
-
-        material.image = stbi_load(str, &material.width, &material.height, &material.comp, STBI_rgb_alpha);
-
-        if (material.image == NULL) {
-                fprintf(stderr, "Failed to load texture '%s'\n", str);
-                exit(0);
-        }
-        load_texture(material);
-        stbi_image_free(material.image);
-}
 
 static void
 gen_vao(GLuint *VAO, size_t n, const float *vertex, size_t m, const GLuint *indexes,
@@ -600,7 +815,13 @@ get_ground_vao(GLuint *VAO, GLuint *indexes_n)
 static inline void
 get_A_vao(GLuint *VAO, GLuint *indexes_n)
 {
-        cube(VAO, indexes_n, 1, 1, 1);
+        cube(VAO, indexes_n, 1, 6, 1);
+}
+
+static inline void
+get_tree_vao(GLuint *VAO, GLuint *indexes_n)
+{
+        square(VAO, indexes_n, 6);
 }
 
 static inline void
@@ -628,12 +849,12 @@ process_input(GLFWwindow *window)
                         // printf("SpeedUp %f\n", moveSpeed);
                 }
                 // move obj
-                objects.at(OBJ_BASE).model = translate(objects.at(OBJ_BASE).model, vec3(moveSpeed, 0, 0));
+                objects.at(OBJ_BASE)->translate(vec3(moveSpeed, 0, 0));
                 // rotate wheel
-                objects.at(OBJ_WHEEL_FL).model = rotate(objects.at(OBJ_WHEEL_FL).model, moveSpeed, vec3(0, 0, -1));
-                objects.at(OBJ_WHEEL_FR).model = rotate(objects.at(OBJ_WHEEL_FR).model, moveSpeed, vec3(0, 0, -1));
-                objects.at(OBJ_WHEEL_BL).model = rotate(objects.at(OBJ_WHEEL_BL).model, moveSpeed, vec3(0, 0, -1));
-                objects.at(OBJ_WHEEL_BR).model = rotate(objects.at(OBJ_WHEEL_BR).model, moveSpeed, vec3(0, 0, -1));
+                objects.at(OBJ_WHEEL_FL)->rotate(moveSpeed, vec3(0, 0, -1));
+                objects.at(OBJ_WHEEL_FR)->rotate(moveSpeed, vec3(0, 0, -1));
+                objects.at(OBJ_WHEEL_BL)->rotate(moveSpeed, vec3(0, 0, -1));
+                objects.at(OBJ_WHEEL_BR)->rotate(moveSpeed, vec3(0, 0, -1));
         }
 
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_RELEASE) {
@@ -643,12 +864,12 @@ process_input(GLFWwindow *window)
                 } else {
                         // printf("SpeedDown %f\n", moveSpeed);
                         //   move obj
-                        objects.at(OBJ_BASE).model = translate(objects.at(OBJ_BASE).model, vec3(moveSpeed, 0, 0));
+                        objects.at(OBJ_BASE)->translate(vec3(moveSpeed, 0, 0));
                         // rotate wheel
-                        objects.at(OBJ_WHEEL_FL).model = rotate(objects.at(OBJ_WHEEL_FL).model, moveSpeed, vec3(0, 0, -1));
-                        objects.at(OBJ_WHEEL_FR).model = rotate(objects.at(OBJ_WHEEL_FR).model, moveSpeed, vec3(0, 0, -1));
-                        objects.at(OBJ_WHEEL_BL).model = rotate(objects.at(OBJ_WHEEL_BL).model, moveSpeed, vec3(0, 0, -1));
-                        objects.at(OBJ_WHEEL_BR).model = rotate(objects.at(OBJ_WHEEL_BR).model, moveSpeed, vec3(0, 0, -1));
+                        objects.at(OBJ_WHEEL_FL)->rotate(moveSpeed, vec3(0, 0, -1));
+                        objects.at(OBJ_WHEEL_FR)->rotate(moveSpeed, vec3(0, 0, -1));
+                        objects.at(OBJ_WHEEL_BL)->rotate(moveSpeed, vec3(0, 0, -1));
+                        objects.at(OBJ_WHEEL_BR)->rotate(moveSpeed, vec3(0, 0, -1));
                 }
         }
 
@@ -664,40 +885,40 @@ process_input(GLFWwindow *window)
                 } else {
                         moveSpeed = 100 * moveInc;
                         // printf("SpeedUp Reverse %f\n", moveSpeed);
-                        objects.at(OBJ_BASE).model = translate(objects.at(OBJ_BASE).model, vec3(-moveSpeed, 0, 0));
+                        objects.at(OBJ_BASE)->translate(vec3(-moveSpeed, 0, 0));
                         // rotate wheel
-                        objects.at(OBJ_WHEEL_FL).model = rotate(objects.at(OBJ_WHEEL_FL).model, moveSpeed, vec3(0, 0, 1));
-                        objects.at(OBJ_WHEEL_FR).model = rotate(objects.at(OBJ_WHEEL_FR).model, moveSpeed, vec3(0, 0, 1));
-                        objects.at(OBJ_WHEEL_BL).model = rotate(objects.at(OBJ_WHEEL_BL).model, moveSpeed, vec3(0, 0, 1));
-                        objects.at(OBJ_WHEEL_BR).model = rotate(objects.at(OBJ_WHEEL_BR).model, moveSpeed, vec3(0, 0, 1));
+                        objects.at(OBJ_WHEEL_FL)->rotate(moveSpeed, vec3(0, 0, 1));
+                        objects.at(OBJ_WHEEL_FR)->rotate(moveSpeed, vec3(0, 0, 1));
+                        objects.at(OBJ_WHEEL_BL)->rotate(moveSpeed, vec3(0, 0, 1));
+                        objects.at(OBJ_WHEEL_BR)->rotate(moveSpeed, vec3(0, 0, 1));
                         moveSpeed = 0;
                 }
         }
 
         if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-                objects.at(OBJ_BASE).model = rotate(objects.at(OBJ_BASE).model, rotateSpeed, vec3(0, 1, 0));
+                objects.at(OBJ_BASE)->rotate(rotateSpeed, vec3(0, 1, 0));
         }
 
         if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-                objects.at(OBJ_BASE).model = rotate(objects.at(OBJ_BASE).model, rotateSpeed, vec3(0, -1, 0));
+                objects.at(OBJ_BASE)->rotate(rotateSpeed, vec3(0, -1, 0));
         }
 
         if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) {
-                if (get_model_rotation(objects.at(OBJ_SPHERE).model).z < PIMED)
-                        objects.at(OBJ_SPHERE).model = rotate(objects.at(OBJ_SPHERE).model, rotateSpeed, vec3(0, 0, 1));
+                if (objects.at(OBJ_SPHERE)->get_rotation().z < PIMED)
+                        objects.at(OBJ_SPHERE)->rotate(rotateSpeed, vec3(0, 0, 1));
         }
 
         if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) {
-                if (get_model_rotation(objects.at(OBJ_SPHERE).model).z > -PIMED)
-                        objects.at(OBJ_SPHERE).model = rotate(objects.at(OBJ_SPHERE).model, rotateSpeed, vec3(0, 0, -1));
+                if (objects.at(OBJ_SPHERE)->get_rotation().z > -PIMED)
+                        objects.at(OBJ_SPHERE)->rotate(rotateSpeed, vec3(0, 0, -1));
         }
 
         if (glfwGetKey(window, GLFW_KEY_H) == GLFW_PRESS) {
-                objects.at(OBJ_SPHERE_BASE).model = rotate(objects.at(OBJ_SPHERE_BASE).model, rotateSpeed, vec3(0, 1, 0));
+                objects.at(OBJ_SPHERE_BASE)->rotate(rotateSpeed, vec3(0, 1, 0));
         }
 
         if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
-                objects.at(OBJ_SPHERE_BASE).model = rotate(objects.at(OBJ_SPHERE_BASE).model, rotateSpeed, vec3(0, -1, 0));
+                objects.at(OBJ_SPHERE_BASE)->rotate(rotateSpeed, vec3(0, -1, 0));
         }
 
         if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS && !c_lock) {
@@ -728,27 +949,6 @@ process_input(GLFWwindow *window)
         if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
                 camera_pos_x -= cameraSpeed;
         }
-
-        if (glfwGetKey(window, GLFW_KEY_0) == GLFW_PRESS)
-                for (struct Object &obj : objects)
-                        obj.printable = 1;
-
-#define __add_num(num)                                                                     \
-        if (glfwGetKey(window, GLFW_KEY_0 + num) == GLFW_PRESS && objects.size() >= num) { \
-                for (struct Object & obj : objects)                                        \
-                        obj.printable = 0;                                                 \
-                objects[num - 1].printable = 1;                                            \
-        }
-
-        __add_num(1);
-        __add_num(2);
-        __add_num(3);
-        __add_num(4);
-        __add_num(5);
-        __add_num(6);
-        __add_num(7);
-        __add_num(8);
-        __add_num(9);
 }
 
 static void
@@ -760,173 +960,64 @@ __framebuffer_size_callback(GLFWwindow *window, int width, int height)
 }
 
 
-mat4 view;
 void
-set_camera(Object &object)
+set_light(Object *light1, Object *light2)
 {
-        vec3 cameraEye;
-        vec3 cameraPosition;
-        vec3 cameraUp;
-        mat4 m;
-        vec3 dirf;
-        GLuint viewLoc = glGetUniformLocation(object.shader_program, "view");
-        GLuint projectionLoc = glGetUniformLocation(object.shader_program, "projection");
-        mat4 projection = perspective(radians(45.0f), (float) WIDTH / (float) HEIGHT, 0.1f, 100.0f);
-
-        switch (VIEW) {
-        case VIEW_NOFOLLOW:
-                cameraEye = vec3(0, 0, 0);
-                cameraPosition = vec3(camera_pos_x, camera_pos_y, 0);
-                cameraUp = vec3(0.0f, 1.0f, 0.0f);
-                break;
-
-        case VIEW_3_PERSON:
-                m = objects.at(OBJ_BASE).model;
-                dirf = normalize(vec3(m[0]));
-                cameraEye = get_obj_absolute_position(objects.at(OBJ_BASE));
-                cameraPosition = cameraEye - dirf * camera_pos_x + vec3(0.0f, camera_pos_y, 0.0f);
-                cameraUp = vec3(m[1]);
-                break;
-
-        case VIEW_1_PERSON:
-                m = objects.at(OBJ_BASE).model * (objects.at(OBJ_HEAD).model);
-                cameraPosition = get_model_relative_position(m);
-                dirf = normalize(vec3(m[0]));
-                cameraEye = cameraPosition + dirf;
-                cameraUp = vec3(objects.at(OBJ_BASE).model[1]);
-                break;
-        }
-
-        view = lookAt(cameraPosition, cameraEye, cameraUp);
-
-        glUniformMatrix4fv(viewLoc, 1, GL_FALSE, value_ptr(view));
-        glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, value_ptr(projection));
-}
-
-
-void
-set_light(Object &object)
-{
-        mat4 model = get_obj_absolute_model(objects.at(OBJ_LIGHT_SPOT));
+        mat4 model = light1->get_absolute_model();
         vec3 local_light_pos = vec3(0.0f, 0.0f, 0.0f); // Posición relativa dentro del objeto
         lightPos = vec3(model * vec4(local_light_pos, 1.0f)); // Aplicar la transformación completa
         vec3 dirf = normalize(vec3(model[0]));
-        vec3 viewPos = get_model_relative_position(view);
-        // printf("Light pos: %f, %f, %f\n", lightPos.x, lightPos.y, lightPos.z);
-        glUniform3fv(glGetUniformLocation(object.shader_program, "lightPos"), 1, value_ptr(lightPos));
-        glUniform3fv(glGetUniformLocation(object.shader_program, "viewPos"), 1, value_ptr(viewPos));
-        glUniform3fv(glGetUniformLocation(object.shader_program, "lightColor"), 1, value_ptr(lightColor * lightIntensity));
-        glUniform3fv(glGetUniformLocation(object.shader_program, "Ka"), 1, object.material.Ka);
-        glUniform3fv(glGetUniformLocation(object.shader_program, "Ks"), 1, object.material.Ks);
-        glUniform3fv(glGetUniformLocation(object.shader_program, "Kd"), 1, object.material.Kd);
-        glUniform3fv(glGetUniformLocation(object.shader_program, "Ke"), 1, object.material.Ke);
-        glUniform1f(glGetUniformLocation(object.shader_program, "Ns"), object.material.Ns);
-        glUniform1f(glGetUniformLocation(object.shader_program, "Ni"), object.material.Ni);
-        glUniform1f(glGetUniformLocation(object.shader_program, "d"), object.material.d);
-        glUniform3fv(glGetUniformLocation(object.shader_program, "lightDir"), 1, value_ptr(dirf));
-        glUniform1i(glGetUniformLocation(object.shader_program, "useTexture"), object.material.texture != 0);
-        float angle = glm::radians(90.0f); // Ángulo de apertura del spotlight
-        float cosineCutoff = sin(angle);
+        glUniform3fv(glGetUniformLocation(light1->get_shader(), "lightPos1"), 1, value_ptr(lightPos));
+        glUniform3fv(glGetUniformLocation(light1->get_shader(), "lightDir1"), 1, value_ptr(dirf));
 
-        // printf("Light Direction (dirf): %f, %f, %f\n", dirf.x, dirf.y, dirf.z);
-        glUniform1f(glGetUniformLocation(object.shader_program, "cosineCutoff"), cosineCutoff);
+        model = light2->get_absolute_model();
+        local_light_pos = vec3(0.0f, 0.0f, 0.0f); // Posición relativa dentro del objeto
+        lightPos = vec3(model * vec4(local_light_pos, 1.0f)); // Aplicar la transformación completa
+        dirf = normalize(vec3(model[0]));
+        glUniform3fv(glGetUniformLocation(light1->get_shader(), "lightPos2"), 1, value_ptr(lightPos));
+        glUniform3fv(glGetUniformLocation(light1->get_shader(), "lightDir2"), 1, value_ptr(dirf));
+
+        vec3 viewPos = cameraPosition;
+        // printf("Light pos: %f, %f, %f\n", lightPos.x, lightPos.y, lightPos.z);
+        glUniform3fv(glGetUniformLocation(light1->get_shader(), "viewPos"), 1, value_ptr(viewPos));
+        glUniform3fv(glGetUniformLocation(light1->get_shader(), "lightColor"), 1, value_ptr(lightColor * lightIntensity));
+        glUniform3fv(glGetUniformLocation(light1->get_shader(), "Ka"), 1, light1->get_material().Ka);
+        glUniform3fv(glGetUniformLocation(light1->get_shader(), "Ks"), 1, light1->get_material().Ks);
+        glUniform3fv(glGetUniformLocation(light1->get_shader(), "Kd"), 1, light1->get_material().Kd);
+        glUniform3fv(glGetUniformLocation(light1->get_shader(), "Ke"), 1, light1->get_material().Ke);
+        glUniform1f(glGetUniformLocation(light1->get_shader(), "Ns"), light1->get_material().Ns);
+        glUniform1f(glGetUniformLocation(light1->get_shader(), "Ni"), light1->get_material().Ni);
+        glUniform1f(glGetUniformLocation(light1->get_shader(), "d"), light1->get_material().d);
+
+
         /* Not suported in windows? */
         // glShadeModel(GL_SMOOTH);
 }
 
 
 void
-set_texture_n_color(Object &object)
-{
-        GLint colorLoc;
-        GLint textureLoc;
-        colorLoc = glGetUniformLocation(object.shader_program, "color");
-        textureLoc = glGetUniformLocation(object.shader_program, "texture1");
-        if (colorLoc != -1)
-                glUniform3f(colorLoc, HexColor(object.color));
-
-        if (textureLoc != -1 && glIsTexture(object.material.texture)) {
-                // printf("Using texture %d\n",object.material.texture);
-                glEnable(GL_TEXTURE_2D);
-                glActiveTexture(GL_TEXTURE0);
-                glUniform1i(textureLoc, 0);
-                glBindTexture(GL_TEXTURE_2D, object.material.texture);
-
-        } else if (object.material.texture != 0) {
-                // printf("Texture %d failed!\n", object.material.texture);
-                // exit(object.material.texture);
-        }
-}
-
-
-static void
-draw_object(Object &object, mat4 model = mat4(1.0f))
-{
-        static GLuint active_shader = 0;
-        GLuint modelLoc;
-
-        // get obj model
-        model = model * object.model;
-
-        // draw attached objects
-        for (Object *attached_obj : object.attached)
-                draw_object(*attached_obj, model);
-
-        if (object.printable == 0)
-                return;
-
-        if (active_shader != object.shader_program) {
-                // printf("Shader set to %d\n", object.shader_program);
-                glUseProgram(object.shader_program);
-                active_shader = object.shader_program;
-        }
-
-        set_camera(object);
-        set_light(object);
-        set_texture_n_color(object);
-
-        modelLoc = glGetUniformLocation(object.shader_program, "model");
-        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, value_ptr(model));
-
-        glBindVertexArray(object.vao);
-        glDrawElements(GL_TRIANGLES, object.indexes_n, GL_UNSIGNED_INT, 0);
-
-        glBindVertexArray(0);
-        glBindTexture(GL_TEXTURE_2D, 0);
-}
-
-void
 mouse_callback(GLFWwindow *window, double xposIn, double yposIn)
 {
         static bool firstMouse = true;
         static float lastX;
-        //static float lastY;
+        // static float lastY;
         float xpos = static_cast<float>(xposIn);
-        //float ypos = static_cast<float>(yposIn);
+        // float ypos = static_cast<float>(yposIn);
         if (firstMouse) {
                 lastX = xpos;
-                //lastY = ypos;
+                // lastY = ypos;
                 firstMouse = false;
         }
 
         float xoffset = xpos - lastX;
-        //float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
+        // float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
 
         lastX = xpos;
-        //lastY = ypos;
+        // lastY = ypos;
 
         float rotateSpeed = 0.01f;
 
-        objects.at(OBJ_BASE).model = rotate(objects.at(OBJ_BASE).model, rotateSpeed * xoffset, vec3(0, -1, 0));
-}
-
-static void
-attach_object(Object *parent, Object *child)
-{
-        if (child->parent)
-                return;
-        parent->attached.push_back(child);
-        child->parent = parent;
+        objects.at(OBJ_BASE)->rotate(rotateSpeed * xoffset, vec3(0, -1, 0));
 }
 
 static void
@@ -965,31 +1056,49 @@ mainloop(GLFWwindow *window)
 {
         /* Execute until window is closed */
         while (!glfwWindowShouldClose(window)) {
+                // printf("In mainloop\n");
                 process_input(window);
+                // printf("Input processed\n");
                 fps();
+                // printf("fps got\n");
 
                 glClearColor(BG_COLOR);
                 glClear(GL_COLOR_BUFFER_BIT);
                 glClear(GL_DEPTH_BUFFER_BIT);
 
                 glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-                draw_object(objects.at(OBJ_GROUND));
-                draw_object(objects.at(OBJ_A));
-                draw_object(objects.at(OBJ_BASE));
+                // printf("setting lights\n");
+                set_light(objects.at(OBJ_LIGHT_SPOT1), objects.at(OBJ_LIGHT_SPOT2));
+                // printf("lights set\n");
+
+                objects.at(OBJ_GROUND)->draw_object();
+                objects.at(OBJ_A)->draw_object();
+                objects.at(OBJ_BASE)->draw_object();
+
+                objects.at(OBJ_TREE1)->draw_object();
+                objects.at(OBJ_TREE2)->draw_object();
+                objects.at(OBJ_TREE3)->draw_object();
+                objects.at(OBJ_TREE4)->draw_object();
+                objects.at(OBJ_TREE5)->draw_object();
+                objects.at(OBJ_TREE6)->draw_object();
+                objects.at(OBJ_TREE7)->draw_object();
+                objects.at(OBJ_TREE8)->draw_object();
+                objects.at(OBJ_TREE9)->draw_object();
+                objects.at(OBJ_TREE10)->draw_object();
                 /* Every object attached to OBJ_BASE is automatically drawn */
 
                 glfwSwapBuffers(window);
                 glfwPollEvents();
         }
 
-        for (struct Object &obj : objects) {
-                glDeleteVertexArrays(1, &obj.vao);
+        for (auto obj : objects) {
+                obj->delete_vao();
         }
 
         return 0;
 }
 
-static const char vertex_shader_color[] =
+static const char vertex_shader[] =
 $(#version 330 core)
 
 $(layout(location = 0) in vec3 aPos;)
@@ -999,12 +1108,13 @@ $(layout(location = 2) in vec3 aNormal;)
 $(uniform mat4 model;)
 $(uniform mat4 view;)
 $(uniform mat4 projection;)
-$(uniform vec3 lightDir;)
-
+$(uniform vec3 lightDir1;)
+$(uniform vec3 lightDir2;)
 $(out vec2 TexCoord;)
 $(out vec3 FragPos;)
 $(out vec3 Normal;)
-$(out vec3 lightDirection;)
+$(out vec3 lightDirection1;)
+$(out vec3 lightDirection2;)
 
 $(void main())
 $({ )
@@ -1012,155 +1122,263 @@ $({ )
     $(FragPos = vec3(model * vec4(aPos, 1.0));)
     $(TexCoord = aTexCoord;)
 
-    $(lightDirection = normalize(lightDir);)
+    $(lightDirection1 = normalize(lightDir1);)
+    $(lightDirection2 = normalize(lightDir2);)
     $( }) "\0";
 
-static const char fragment_shader_color[] =
+static const char fragment_shader[] =
 $(#version 330 core)
 
 $(in vec3 FragPos;)
 $(in vec2 TexCoord;)
-$(in vec3 lightDirection;)
+$(in vec3 lightDirection1;)
+$(in vec3 lightDirection2;)
 $(out vec4 FragColor;)
-
-$(uniform vec3 lightPos;)
+$(uniform vec3 lightPos1;)
+$(uniform vec3 lightPos2;)
 $(uniform vec3 lightColor;)
 $(uniform vec3 Ka;)
 $(uniform vec3 Kd;)
 $(uniform vec3 viewPos;)
 $(uniform vec3 color;)
 $(uniform sampler2D texture1;)
-$(uniform float cosineCutoff;)
 $(uniform int useTexture;)
 
 $(void)
 $(main())
 $({ )
-
     $(vec3 dX = dFdx(FragPos);)
     $(vec3 dY = dFdy(FragPos);)
     $(vec3 norm = normalize(cross(dX, dY));)
-
-    $(float ambientStrength = 0.3;)
+    $(float ambientStrength = 0.8;)
     $(vec3 ambient = ambientStrength * lightColor;)
     $(vec3 light = ambient * Ka;)
+    $(vec3 specular = vec3(0, 0, 0);)
+    $(vec3 lightDirNorm1 = normalize(lightPos1 - FragPos);)
+    $(vec3 lightDirNorm2 = normalize(lightPos2 - FragPos);)
+    $(float distance1 = length(lightPos1 - FragPos);)
+    $(float distance2 = length(lightPos2 - FragPos);)
 
-    $(vec3 lightDirNorm = normalize(lightPos - FragPos);)
+    $(float Kc = 2.0;)
+    $(float Kl = 1.2;)
+    $(float Kq = 0.09;)
 
-    $(float distance = length(lightPos - FragPos);)
+    $(float attenuation1 = 1.0 /(Kc + Kl * distance1 + Kq *(distance1 * distance1));)
+    $(float specularStrength = 0.5;)
+    $(vec3 fd1 = normalize(FragPos - lightPos1);)
+    $(vec3 fd2 = normalize(FragPos - lightPos2);)
 
-    $(float Kc = 0.1;)
-    $(float Kl = 0.02;)
-    $(float Kq = 0.032;)
-
-    $(float attenuation = 1.0 /(Kc + Kl * distance + Kq *(distance * distance));)
-
-    $(float falloffFactor = 2.0;)
-    $(float centerIntensity = pow(max(dot(norm, lightDirNorm), 0.0), falloffFactor);)
-
-    $(vec3 fd = normalize(FragPos - lightPos);)
-    $(if (acos(dot(fd, lightDirection))<radians(15.0)))
+    $(if (acos(dot(fd1, lightDirection1))<radians(15.0)))
     $({ )
-        $(float diff = max(dot(norm, lightDirNorm), 0.0);)
-        $(vec3 diffuse = diff * Kd * attenuation * lightColor;)
+        $(float diff = max(dot(norm, lightDirNorm1), 0.0);)
+        $(vec3 diffuse = diff * Kd * attenuation1 * lightColor;)
         $(light += diffuse;)
-
-        $(float specularStrength = 0.5;)
         $(vec3 viewDir = normalize(viewPos - FragPos);)
-        $(vec3 reflectDir = reflect(- lightDirNorm, norm);)
-        $(float spec = pow(max(dot(viewDir, reflectDir), 0.0), 64);)
-        $(vec3 specular = specularStrength * spec * lightColor * attenuation;)
-        /*$(light +=specular;)*/
+        $(vec3 reflectDir = reflect(- lightDirNorm1, norm);)
+        $(float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);)
+        $(specular = specularStrength * spec * lightColor * attenuation1;)
+        $( })
 
+    $(else if (acos(dot(fd2, lightDirection2))<radians(15.0)))
+    $({ )
+        $(float diff = max(dot(norm, lightDirNorm2), 0.0);)
+        $(vec3 diffuse = diff * Kd * attenuation1 * lightColor;)
+        $(light += diffuse;)
+        $(vec3 viewDir = normalize(viewPos - FragPos);)
+        $(vec3 reflectDir = reflect(- lightDirNorm2, norm);)
+        $(float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);)
+        $(specular = specularStrength * spec * lightColor * attenuation1;)
         $( })
 
     $(if (useTexture == 1))
     $({ )
-        $(FragColor = vec4(light * color, 1.0) * texture(texture1, TexCoord);)
+        $(vec4 texColor = texture(texture1, TexCoord);)
+        $(if (texColor.a<0.1))
+        $({ )
+            $(discard;)
+            $( })
+        $(FragColor = vec4(light + specular, 1.0) * texColor;)
         $( })
     $(else)
     $({ )
-        $(FragColor = vec4(light * color, 1.0);)
+        $(FragColor = vec4(light * color + specular, 1.0);)
         $( })
     $( }) "\n\0";
 
 
 void
+init_object_vector(vector<Object *> &objs)
+{
+        for (auto o : objs) {
+                o->init();
+        }
+}
+
+void
+__look_at_view(Object *self)
+{
+        // printf("Object %s looking to camera\n", self->get_name());
+        self->look_at(cameraPosition);
+}
+
+void
 init_objects()
 {
-        GLuint shader_program = setShaders_str(vertex_shader_color, fragment_shader_color);
+        GLuint shader_program = setShaders_str(vertex_shader, fragment_shader);
         assert(shader_program > 0);
 
         use_global_shader(shader_program);
 
-        new_object("ground", get_ground_vao);
-        new_object("base", get_base_vao);
-        new_object("head", get_head_vao);
-        new_object("wheel_fl", get_wheel_vao, 0x444444);
-        new_object("wheel_fr", get_wheel_vao, 0x444444);
-        new_object("wheel_bl", get_wheel_vao, 0x444444);
-        new_object("wheel_br", get_wheel_vao, 0x444444);
-        new_object("circle_base", get_circle_base_vao);
-        new_object("circle", get_circle_vao);
-        new_object("palo", get_palo_vao);
-        new_object("A", get_A_vao, 0xAACC00);
-        new_object("Light Spot", get_lightspot_vao, 0xFFFFFF, false);
+        static Object ground = Object("ground", get_ground_vao);
+        static Object base = Object("base", get_base_vao);
+        static Object head = Object("head", get_head_vao);
+        static Object wheel_fl = Object("wheel_fl", get_wheel_vao, 0x444444);
+        static Object wheel_fr = Object("wheel_fr", get_wheel_vao, 0x444444);
+        static Object wheel_bl = Object("wheel_bl", get_wheel_vao, 0x444444);
+        static Object wheel_br = Object("wheel_br", get_wheel_vao, 0x444444);
+        static Object circle_base = Object("circle_base", get_circle_base_vao);
+        static Object circle = Object("circle", get_circle_vao);
+        static Object palo = Object("palo", get_palo_vao);
+        static Object A = Object("A", get_A_vao, 0xAACC00);
+        static Object Light_Spot_1 = Object("Light Spot 1", get_lightspot_vao, 0xFFFFFF, false);
+        static Object Light_Spot_2 = Object("Light Spot 2", get_lightspot_vao, 0xFFFFFF, false);
+        static Object tree1 = Object("tree1", get_tree_vao);
+        static Object tree2 = Object("tree2", get_tree_vao);
+        static Object tree3 = Object("tree3", get_tree_vao);
+        static Object tree4 = Object("tree4", get_tree_vao);
+        static Object tree5 = Object("tree5", get_tree_vao);
+        static Object tree6 = Object("tree6", get_tree_vao);
+        static Object tree7 = Object("tree7", get_tree_vao);
+        static Object tree8 = Object("tree8", get_tree_vao);
+        static Object tree9 = Object("tree9", get_tree_vao);
+        static Object tree10 = Object("tree10", get_tree_vao);
+        ground.push(&objects);
+        base.push(&objects);
+        head.push(&objects);
+        wheel_fl.push(&objects);
+        wheel_fr.push(&objects);
+        wheel_bl.push(&objects);
+        wheel_br.push(&objects);
+        circle_base.push(&objects);
+        circle.push(&objects);
+        palo.push(&objects);
+        A.push(&objects);
+        Light_Spot_1.push(&objects);
+        Light_Spot_2.push(&objects);
+        tree1.push(&objects);
+        tree2.push(&objects);
+        tree3.push(&objects);
+        tree4.push(&objects);
+        tree5.push(&objects);
+        tree6.push(&objects);
+        tree7.push(&objects);
+        tree8.push(&objects);
+        tree9.push(&objects);
+        tree10.push(&objects);
 
-        add_material_image("./textures/StripedAsphalt/Striped_Asphalt_ufoidcskw_1K_BaseColor.jpg",
-                           objects.at(OBJ_GROUND).material);
+        assert(objects.size() > 0);
 
-        add_material_image("./textures/bluePlastic/Scratched_Polypropylene_Plastic_schbehmp_1K_BaseColor.jpg",
-                           objects.at(OBJ_PALO).material);
+        objects.at(OBJ_GROUND)->add_material_image("./textures/StripedAsphalt/Striped_Asphalt_ufoidcskw_1K_BaseColor.jpg");
+        objects.at(OBJ_PALO)->add_material_image("./textures/bluePlastic/Scratched_Polypropylene_Plastic_schbehmp_1K_BaseColor.jpg");
+        objects.at(OBJ_BASE)->add_material_image("./textures/marbleCheckeredFloor/Marble_Checkered_Floor_sescnen_1K_BaseColor.jpg");
+        objects.at(OBJ_TREE1)->add_material_image("./textures/tree2d.png", GL_CLAMP_TO_EDGE);
 
-        add_material_image("./textures/marbleCheckeredFloor/Marble_Checkered_Floor_sescnen_1K_BaseColor.jpg",
-                           objects.at(OBJ_BASE).material);
+        objects.at(OBJ_HEAD)->set_material(objects.at(OBJ_BASE)->get_material());
+        objects.at(OBJ_SPHERE_BASE)->set_material(objects.at(OBJ_PALO)->get_material());
+        objects.at(OBJ_SPHERE)->set_material(objects.at(OBJ_PALO)->get_material());
 
-        objects.at(OBJ_HEAD).material = objects.at(OBJ_BASE).material;
-        objects.at(OBJ_SPHERE_BASE).material = objects.at(OBJ_PALO).material;
-        objects.at(OBJ_SPHERE).material = objects.at(OBJ_PALO).material;
+        objects.at(OBJ_TREE2)->set_material(objects.at(OBJ_TREE1)->get_material());
+        objects.at(OBJ_TREE3)->set_material(objects.at(OBJ_TREE1)->get_material());
+        objects.at(OBJ_TREE4)->set_material(objects.at(OBJ_TREE1)->get_material());
+        objects.at(OBJ_TREE5)->set_material(objects.at(OBJ_TREE1)->get_material());
+        objects.at(OBJ_TREE6)->set_material(objects.at(OBJ_TREE1)->get_material());
+        objects.at(OBJ_TREE7)->set_material(objects.at(OBJ_TREE1)->get_material());
+        objects.at(OBJ_TREE8)->set_material(objects.at(OBJ_TREE1)->get_material());
+        objects.at(OBJ_TREE9)->set_material(objects.at(OBJ_TREE1)->get_material());
+        objects.at(OBJ_TREE10)->set_material(objects.at(OBJ_TREE1)->get_material());
 
         // A
-        objects.at(OBJ_A).model = translate(objects.at(OBJ_A).model, vec3(6.0, 3, 0.0));
+        objects.at(OBJ_A)->translate(vec3(6.0, 3, 0.0));
 
         // Base
-        objects.at(OBJ_BASE).model = rotate(objects.at(OBJ_BASE).model, PIMED, vec3(0.0, 1.0, 0.0));
-        objects.at(OBJ_BASE).model = translate(objects.at(OBJ_BASE).model, vec3(0.0, 1.39, 0.0));
+        objects.at(OBJ_BASE)->rotate(PIMED, vec3(0.0, 1.0, 0.0));
+        objects.at(OBJ_BASE)->translate(vec3(0.0, 1.39, 0.0));
 
         // Head
-        attach_object(vec_ptr(objects, OBJ_BASE), vec_ptr(objects, OBJ_HEAD));
-        objects.at(OBJ_HEAD).model = translate(objects.at(OBJ_HEAD).model, vec3(2.75, 2.0, 0.0));
+        objects.at(OBJ_BASE)->attach(objects.at(OBJ_HEAD));
+        objects.at(OBJ_HEAD)->translate(vec3(2.75, 2.0, 0.0));
 
         // wheel_fl
-        attach_object(vec_ptr(objects, OBJ_BASE), vec_ptr(objects, OBJ_WHEEL_FL));
-        objects.at(OBJ_WHEEL_FL).model = translate(objects.at(OBJ_WHEEL_FL).model, vec3(2.5, -0.75, -1.5));
+        objects.at(OBJ_BASE)->attach(objects.at(OBJ_WHEEL_FL));
+        objects.at(OBJ_WHEEL_FL)->translate(vec3(2.5, -0.75, -1.5));
 
         // wheel_fr
-        attach_object(vec_ptr(objects, OBJ_BASE), vec_ptr(objects, OBJ_WHEEL_FR));
-        objects.at(OBJ_WHEEL_FR).model = translate(objects.at(OBJ_WHEEL_FR).model, vec3(2.5, -0.75, +1.5));
+        objects.at(OBJ_BASE)->attach(objects.at(OBJ_WHEEL_FR));
+        objects.at(OBJ_WHEEL_FR)->translate(vec3(2.5, -0.75, +1.5));
 
         // wheel_bl
-        attach_object(vec_ptr(objects, OBJ_BASE), vec_ptr(objects, OBJ_WHEEL_BL));
-        objects.at(OBJ_WHEEL_BL).model = translate(objects.at(OBJ_WHEEL_BL).model, vec3(-2.5, -0.75, -1.5));
+        objects.at(OBJ_BASE)->attach(objects.at(OBJ_WHEEL_BL));
+        objects.at(OBJ_WHEEL_BL)->translate(vec3(-2.5, -0.75, -1.5));
 
         // wheel_br
-        attach_object(vec_ptr(objects, OBJ_BASE), vec_ptr(objects, OBJ_WHEEL_BR));
-        objects.at(OBJ_WHEEL_BR).model = translate(objects.at(OBJ_WHEEL_BR).model, vec3(-2.5, -0.75, +1.5));
+        objects.at(OBJ_BASE)->attach(objects.at(OBJ_WHEEL_BR));
+        objects.at(OBJ_WHEEL_BR)->translate(vec3(-2.5, -0.75, +1.5));
 
         // sphere base
-        attach_object(vec_ptr(objects, OBJ_BASE), vec_ptr(objects, OBJ_SPHERE_BASE));
-        objects.at(OBJ_SPHERE_BASE).model = translate(objects.at(OBJ_SPHERE_BASE).model, vec3(-1.0, 0.75, 0.0));
+        objects.at(OBJ_BASE)->attach(objects.at(OBJ_SPHERE_BASE));
+        objects.at(OBJ_SPHERE_BASE)->translate(vec3(-1.0, 0.75, 0.0));
 
         // sphere
-        attach_object(vec_ptr(objects, OBJ_SPHERE_BASE), vec_ptr(objects, OBJ_SPHERE));
-        objects.at(OBJ_SPHERE).model = translate(objects.at(OBJ_SPHERE).model, vec3(0.0, 0.5, 0.0));
+        objects.at(OBJ_SPHERE_BASE)->attach(objects.at(OBJ_SPHERE));
+        objects.at(OBJ_SPHERE)->translate(vec3(0.0, 0.5, 0.0));
 
         // palo
-        attach_object(vec_ptr(objects, OBJ_SPHERE), vec_ptr(objects, OBJ_PALO));
-        objects.at(OBJ_PALO).model = translate(objects.at(OBJ_PALO).model, vec3(0.0, 2.75, 0.0));
+        objects.at(OBJ_SPHERE)->attach(objects.at(OBJ_PALO));
+        objects.at(OBJ_PALO)->translate(vec3(0.0, 2.75, 0.0));
 
         // light spot (where light is placed)
-        attach_object(vec_ptr(objects, OBJ_HEAD), vec_ptr(objects, OBJ_LIGHT_SPOT));
-        objects.at(OBJ_LIGHT_SPOT).model = translate(objects.at(OBJ_LIGHT_SPOT).model, vec3(1.0, 0.0, 0.0));
+        objects.at(OBJ_HEAD)->attach(objects.at(OBJ_LIGHT_SPOT1));
+        objects.at(OBJ_LIGHT_SPOT1)->translate(vec3(0.0, 0.0, -1.0));
+
+        objects.at(OBJ_HEAD)->attach(objects.at(OBJ_LIGHT_SPOT2));
+        objects.at(OBJ_LIGHT_SPOT2)->translate(vec3(0.0, 0.0, +1.0));
+
+        objects.at(OBJ_TREE1)->rotate(PI, vec3(0.0, 0.0, 1.0));
+        objects.at(OBJ_TREE1)->rotate(PIMED, vec3(1.0, 0.0, 0.0));
+
+        objects.at(OBJ_TREE2)->set_model(objects.at(OBJ_TREE1)->get_model());
+        objects.at(OBJ_TREE3)->set_model(objects.at(OBJ_TREE1)->get_model());
+        objects.at(OBJ_TREE4)->set_model(objects.at(OBJ_TREE1)->get_model());
+        objects.at(OBJ_TREE5)->set_model(objects.at(OBJ_TREE1)->get_model());
+        objects.at(OBJ_TREE6)->set_model(objects.at(OBJ_TREE1)->get_model());
+        objects.at(OBJ_TREE7)->set_model(objects.at(OBJ_TREE1)->get_model());
+        objects.at(OBJ_TREE8)->set_model(objects.at(OBJ_TREE1)->get_model());
+        objects.at(OBJ_TREE9)->set_model(objects.at(OBJ_TREE1)->get_model());
+        objects.at(OBJ_TREE10)->set_model(objects.at(OBJ_TREE1)->get_model());
+
+        objects.at(OBJ_TREE1)->translate(vec3(06.0, 4.0, 4.0));
+        objects.at(OBJ_TREE2)->translate(vec3(12.0, 4.0, 4.0));
+        objects.at(OBJ_TREE3)->translate(vec3(18.0, 4.0, 4.0));
+        objects.at(OBJ_TREE4)->translate(vec3(24.0, 4.0, 4.0));
+        objects.at(OBJ_TREE5)->translate(vec3(30.0, 4.0, 4.0));
+        objects.at(OBJ_TREE6)->translate(vec3(36.0, 4.0, 4.0));
+        objects.at(OBJ_TREE7)->translate(vec3(42.0, 4.0, 4.0));
+        objects.at(OBJ_TREE8)->translate(vec3(48.0, 4.0, 4.0));
+        objects.at(OBJ_TREE9)->translate(vec3(54.0, 4.0, 4.0));
+        objects.at(OBJ_TREE10)->translate(vec3(60.0, 4.0, 4.0));
+
+        objects.at(OBJ_TREE1)->set_before_draw(__look_at_view);
+        objects.at(OBJ_TREE2)->set_before_draw(__look_at_view);
+        objects.at(OBJ_TREE3)->set_before_draw(__look_at_view);
+        objects.at(OBJ_TREE4)->set_before_draw(__look_at_view);
+        objects.at(OBJ_TREE5)->set_before_draw(__look_at_view);
+        objects.at(OBJ_TREE6)->set_before_draw(__look_at_view);
+        objects.at(OBJ_TREE7)->set_before_draw(__look_at_view);
+        objects.at(OBJ_TREE8)->set_before_draw(__look_at_view);
+        objects.at(OBJ_TREE9)->set_before_draw(__look_at_view);
+        objects.at(OBJ_TREE10)->set_before_draw(__look_at_view);
+
+        init_object_vector(objects);
 }
 
 
@@ -1203,9 +1421,7 @@ main()
 
         /* Mouse stuff */
 
-#if !defined(_WIN32) /* Why windows, why? */
         if (glfwRawMouseMotionSupported())
-#endif
                 glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
@@ -1218,7 +1434,6 @@ main()
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
         show_help();
-
         init_objects();
 
         mainloop(window);
