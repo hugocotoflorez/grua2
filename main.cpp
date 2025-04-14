@@ -1,7 +1,19 @@
-/* Freedoom
- *
- * Author: Hugo Coto Florez
- */
+    /* * * * * * * * * * * * * * * * * * * * * * * * * * * * /|
+   /                                                        / |
+  /                                                        /  |
+ / ____________________________________________________   /   |
+|* Grua (texturas + iluminacion). Practica COGA 2025    *|    |
+|* ---------------------------------------------------- *|    |
+|* Autores:                                             *|    |
+|*      Hugo Coto Florez                                *|    |
+|*      Guillermo Fernandez                             *|    |
+|*                                                      *|    |
+|* License: licenseless                                 *|    /
+|*                                                      *|   /
+|* Version 0.02: Reimplementacion con clases.           *|  /
+|* Version 0.<2: Sigue visible en ./deprecated          *| /
+|*                                                      *|/
+|* ---------------------------------------------------- */
 
 /* Enable VSync. FPS limited to screen refresh rate
  * (0: disable, 1: enable, undef: default) */
