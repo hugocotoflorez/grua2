@@ -2,22 +2,13 @@
   Lectura y Creacion de Shaders
 *******************************************/
 
+#include <glad/glad.h>
 
-#ifdef _MSC_VER
-#define _CRT_SECURE_NO_WARNINGS // Evitamos alguno errores de funciones no seguras
-#endif
-
-
-// Librerias necesarias
-#include "include/glad/glad.h"
-
+#include <assert.h>
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-
-// Para leer los ficheros de texto plano
 
 
 char *
@@ -92,21 +83,16 @@ printProgramInfoLog(GLuint obj)
 GLuint
 setShaders(const char *nVertx, const char *nFrag)
 {
-        // Definicion vertex y fragment shader
         GLuint vertexShader, fragmentShader;
-        // ficheros de vertex y fragment shaders
         char *ficherovs = NULL;
         char *ficherofs = NULL;
-        // Definicion del program Shader
         GLuint progShader;
         const char *codigovs = NULL;
         const char *codigofs = NULL;
 
-        // Creo el vertexShader y el FragmentShader
         vertexShader = glCreateShader(GL_VERTEX_SHADER);
         fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
 
-        // Leo el codigo del ficheo y hay error devuelve un NULL
         ficherovs = textFileRead(nVertx);
         if (ficherovs == NULL)
                 return (GLuint) NULL;
@@ -114,10 +100,8 @@ setShaders(const char *nVertx, const char *nFrag)
         if (ficherofs == NULL)
                 return (GLuint) NULL;
 
-        // Lo igual al puntero para cargarlos
         codigovs = ficherovs;
         codigofs = ficherofs;
-        // Los cargo
         glShaderSource(vertexShader, 1, &codigovs, NULL);
         glShaderSource(fragmentShader, 1, &codigofs, NULL);
 
@@ -144,6 +128,7 @@ setShaders(const char *nVertx, const char *nFrag)
         glLinkProgram(progShader);
         // A ver si hay errores
         printProgramInfoLog(progShader);
+        assert(progShader > 0);
 
         return (progShader);
 }
@@ -181,6 +166,7 @@ setShaders_str(const char *nVertx, const char *nFrag)
         glLinkProgram(progShader);
         // A ver si hay errores
         printProgramInfoLog(progShader);
+        assert(progShader > 0);
 
         return (progShader);
 }

@@ -132,8 +132,7 @@ class Material
         {
         }
 
-        GLuint
-        load_texture(int how = 0)
+        GLuint load_texture(int how = 0)
         {
                 unsigned int texture;
                 if (image == NULL) {
@@ -160,8 +159,7 @@ class Material
                 return texture;
         }
 
-        void
-        add_material_image(const char *path, int how = 0)
+        void add_material_image(const char *path, int how = 0)
         {
                 stbi_set_flip_vertically_on_load(1);
 
@@ -178,7 +176,7 @@ class Material
 
 void set_camera(int);
 
-class Object
+class Mesh
 {
     private:
         const char *name;
@@ -188,17 +186,17 @@ class Object
         int color;
         mat4 model; // relative model
         mat4 default_model; // default starting relative model
-        vector<Object *> attached;
-        Object *parent;
+        vector<Mesh *> attached;
+        Mesh *parent;
         Material material;
         unsigned int shader_program;
         void (*get_vao)(GLuint *, GLuint *);
-        void (*before_draw)(Object *);
+        void (*before_draw)(Mesh *);
 
     public:
-        Object(const char *name, void (*get_vao_func)(GLuint *, GLuint *),
-               int _color = 0xFFFFFF,
-               bool _printable = true)
+        Mesh(const char *name, void (*get_vao_func)(GLuint *, GLuint *),
+             int _color = 0xFFFFFF,
+             bool _printable = true)
         : name(name),
           printable(_printable),
           color(_color),
@@ -221,7 +219,7 @@ class Object
                 printable = false;
         }
 
-        Object &set_shader(GLuint shader)
+        Mesh &set_shader(GLuint shader)
         {
                 shader_program = shader;
                 return *this;
@@ -237,19 +235,18 @@ class Object
                 return material;
         }
 
-        void set_material(Material _material)
+        Mesh &set_material(Material _material)
         {
                 material = _material;
+                return *this;
         }
 
-        vec3
-        get_position()
+        vec3 get_position()
         {
                 return vec3(model[3]);
         }
 
-        mat4
-        get_absolute_model()
+        mat4 get_absolute_model()
         {
                 if (parent) {
                         return parent->get_absolute_model() * model;
@@ -257,27 +254,23 @@ class Object
                 return model;
         }
 
-        vec3
-        get_obj_absolute_position()
+        vec3 get_absolute_position()
         {
                 return vec3(get_absolute_model()[3]);
         }
 
-        mat3
-        get_rotation_matrix()
+        mat3 get_rotation_matrix()
         {
                 return mat3(model);
         }
 
-        Object *
-        add_material_image(const char *path, int how = 0)
+        Mesh &add_material_image(const char *path, int how = 0)
         {
                 material.add_material_image(path, how);
-                return this;
+                return *this;
         }
 
-        vec3
-        get_rotation()
+        vec3 get_rotation()
         {
                 return eulerAngles(quat_cast(mat3(model)));
         }
@@ -292,13 +285,13 @@ class Object
                 return model;
         }
 
-        Object &set_model(mat4 _model)
+        Mesh &set_model(mat4 _model)
         {
                 model = _model;
                 return *this;
         }
 
-        Object &set_before_draw_function(void (*_before_draw)(Object *))
+        Mesh &set_before_draw_function(void (*_before_draw)(Mesh *))
         {
                 before_draw = _before_draw;
                 return *this;
@@ -309,47 +302,47 @@ class Object
                 return shader_program;
         }
 
-        Object &rotate(float angle, vec3 v)
+        Mesh &rotate(float angle, vec3 v)
         {
                 model = glm::rotate(model, angle, v);
                 return *this;
         }
 
-        Object &translate(vec3 v)
+        Mesh &translate(vec3 v)
         {
                 model = glm::translate(model, v);
                 return *this;
         }
 
-        void
-        look_at(vec3 view_pos)
+        void look_at(vec3 view_pos)
         {
-                vec3 obj_pos = get_position();
+                vec3 mesh_pos = get_position();
                 mat3 rotation = get_default_rotation_matrix();
-                vec3 dir = normalize(vec3(view_pos.x - obj_pos.x, 0.0, view_pos.z - obj_pos.z));
+                vec3 dir = normalize(vec3(view_pos.x - mesh_pos.x, 0.0, view_pos.z - mesh_pos.z));
                 float angle = atan2(dir.x, dir.z);
                 mat4 _model = mat4(1.0f);
-                _model = glm::translate(_model, obj_pos);
+                _model = glm::translate(_model, mesh_pos);
                 _model = glm::rotate(_model, angle, vec3(0.0, 1.0, 0.0));
                 _model *= mat4(rotation);
                 model = _model;
         }
 
-        void
-        set_texture_n_color()
+        void set_texture_n_color()
         {
                 GLint colorLoc;
                 GLint textureLoc;
                 colorLoc = glGetUniformLocation(shader_program, "color");
                 glUniform1i(glGetUniformLocation(shader_program, "useTexture"), material.textures.size() > 0);
                 glUniform1i(glGetUniformLocation(shader_program, "texture_count"), material.textures.size());
-                if (colorLoc != -1)
+                if (colorLoc != -1) {
                         glUniform3f(colorLoc, HexColor(color));
+                        //printf("  color %x\n", color);
+                }
 
-                for (int i = 0; i < material.textures.size(); ++i) {
+                for (size_t i = 0; i < material.textures.size(); ++i) {
                         unsigned int texture = material.textures.at(i);
                         if (glIsTexture(texture)) {
-                                // printf("Using texture %d\n",material.texture);
+                                //printf("  texture %d\n", texture);
                                 glEnable(GL_TEXTURE_2D);
                                 glActiveTexture(GL_TEXTURE0 + i);
                                 textureLoc = glGetUniformLocation(shader_program, ("textures[" + std::to_string(i) + "]").c_str());
@@ -363,15 +356,14 @@ class Object
                 }
         }
 
-        void
-        draw_object(mat4 _model = mat4(1.0f))
+        void draw(mat4 _model = mat4(1.0f))
         {
                 static GLuint active_shader = 0;
 
                 _model = _model * model;
 
-                for (Object *attached_obj : attached) {
-                        (*attached_obj).draw_object(_model);
+                for (Mesh *attached_mesh : attached) {
+                        (*attached_mesh).draw(_model);
                 }
 
                 if (!printable) return;
@@ -382,8 +374,12 @@ class Object
                         active_shader = shader_program;
                 }
 
+                //printf("Printing mesh %s\n", name);
+                //printf("  shader: %d\n", active_shader);
+
                 set_camera(shader_program);
                 set_texture_n_color();
+
 
                 glUniformMatrix4fv(glGetUniformLocation(shader_program, "model"), 1, GL_FALSE, value_ptr(_model));
 
@@ -395,31 +391,21 @@ class Object
                 glBindTexture(GL_TEXTURE_2D, 0);
         }
 
-        void
-        attach(Object *child)
+        void attach(Mesh *child)
         {
-                if (child->parent)
-                        return;
-                // printf("Vec Size before attach: %zd\n", attached.size());
+                if (child->parent) return;
                 attached.push_back(child);
                 child->parent = this;
-                // printf("Vec Size after attach: %zd\n", attached.size());
         }
 
-        bool collide(Object o)
+        void set_before_draw(Mesh *mesh, void (*func)(Mesh *))
         {
-                vec3 self_pos = get_obj_absolute_position();
-                vec3 obj_pos = o.get_obj_absolute_position();
-                self_pos.y = 0;
-                obj_pos.y = 0;
-                float dist = glm::distance(self_pos, obj_pos);
-                return false;
+                mesh->before_draw = func;
         }
 
-        void
-        set_before_draw(Object *obj, void (*func)(Object *))
+        bool is_attached()
         {
-                obj->before_draw = func;
+                return parent != nullptr;
         }
 
         void delete_vao()
@@ -427,73 +413,153 @@ class Object
                 glDeleteVertexArrays(1, &vao);
         }
 
-        Object *init()
+        Mesh &init()
         {
                 get_vao(&vao, &indexes_n);
                 default_model = model;
-                return this;
+                return *this;
+        }
+};
+
+class Object
+{
+    private:
+        vector<Mesh *> meshes;
+
+    public:
+        Object &add_mesh(Mesh *m)
+        {
+                meshes.push_back(m);
+                return *this;
+        }
+
+        void draw()
+        {
+                for (auto m : meshes)
+                        if (!m->is_attached())
+                                m->draw();
+        }
+
+        Object &set_shader(GLuint shader)
+        {
+                for (Mesh *m : meshes)
+                        m->set_shader(shader);
+                return *this;
+        }
+
+        Object &init()
+        {
+                for (Mesh *m : meshes)
+                        m->init();
+                return *this;
+        }
+
+        Object &set_before_draw_function(void (*_before_draw)(Mesh *))
+        {
+                for (auto m : meshes)
+                        m->set_before_draw_function(_before_draw);
+                return *this;
+        }
+
+        Object &rotate(float angle, vec3 v)
+        {
+                for (auto m : meshes)
+                        if (!m->is_attached())
+                                m->rotate(angle, v);
+                return *this;
+        }
+
+        Object &translate(vec3 v)
+        {
+                for (auto m : meshes)
+                        if (!m->is_attached())
+                                m->translate(v);
+                return *this;
+        }
+
+        Object &add_material_image(const char *path, int how = 0)
+        {
+                for (auto m : meshes)
+                        m->add_material_image(path, how);
+                return *this;
         }
 };
 
 class Scene
 {
     private:
-        vector<Object> objects;
+        vector<Mesh*> meshes;
+        vector<Object*> objects;
 
     public:
         Scene()
         {
         }
 
-        vector<Object> scene_object_collisions(Object obj, vector<Object> other)
+        vector<Mesh*> &get_meshes()
         {
-                vector<Object> collisions;
-                for (auto o : other) {
-                        if (o.collide(obj))
-                                collisions.push_back(o);
-                }
-                for (auto c : collisions)
-                        printf("%s collide with %s\n", obj.get_name(), c.get_name());
-                return collisions;
+                return meshes;
         }
 
-        vector<Object> get_objects()
+        Scene &add_mesh(Mesh *o)
+        {
+                meshes.push_back(o);
+                return *this;
+        }
+
+        vector<Object*> &get_objects()
         {
                 return objects;
         }
 
-        Scene &add_object(Object &o)
+        Scene &add_object(Object *o)
         {
                 objects.push_back(o);
                 return *this;
+        }
+
+        void draw()
+        {
+                for (auto o : objects)
+                        o->draw();
+                for (auto m : meshes)
+                        m->draw();
+        }
+
+        void init()
+        {
+                for (auto o : objects)
+                        o->init();
+                for (auto m : meshes)
+                        m->init();
         }
 };
 
 static Scene scene = Scene();
 
-extern Object obj_grnd;
-extern Object obj_base;
-extern Object obj_head;
-extern Object obj_w_fl;
-extern Object obj_w_fr;
-extern Object obj_w_bl;
-extern Object obj_w_br;
-extern Object obj_rotb;
-extern Object obj_rots;
-extern Object obj_palo;
-extern Object obj_cube;
-extern Object obj_ls_1;
-extern Object obj_ls_2;
-extern Object obj_tre1;
-extern Object obj_tre2;
-extern Object obj_tre3;
-extern Object obj_tre4;
-extern Object obj_tre5;
-extern Object obj_tre6;
-extern Object obj_tre7;
-extern Object obj_tre8;
-extern Object obj_tre9;
-extern Object obj_tre0;
+extern Mesh mesh_grnd;
+extern Mesh mesh_base;
+extern Mesh mesh_head;
+extern Mesh mesh_w_fl;
+extern Mesh mesh_w_fr;
+extern Mesh mesh_w_bl;
+extern Mesh mesh_w_br;
+extern Mesh mesh_rotb;
+extern Mesh mesh_rots;
+extern Mesh mesh_palo;
+extern Mesh mesh_cube;
+extern Mesh mesh_ls_1;
+extern Mesh mesh_ls_2;
+extern Mesh mesh_tre1;
+extern Mesh mesh_tre2;
+extern Mesh mesh_tre3;
+extern Mesh mesh_tre4;
+extern Mesh mesh_tre5;
+extern Mesh mesh_tre6;
+extern Mesh mesh_tre7;
+extern Mesh mesh_tre8;
+extern Mesh mesh_tre9;
+extern Mesh mesh_tre0;
 
 
 void
@@ -516,19 +582,19 @@ set_camera(int shader)
                 break;
 
         case VIEW_3_PERSON:
-                m = obj_base.get_absolute_model();
+                m = mesh_base.get_absolute_model();
                 dirf = normalize(vec3(m[0]));
-                cameraEye = obj_base.get_obj_absolute_position();
+                cameraEye = mesh_base.get_absolute_position();
                 cameraPosition = cameraEye - dirf * camera_offset_x + vec3(0.0f, camera_offset_y, 0.0f);
                 cameraUp = vec3(m[1]);
                 break;
 
         case VIEW_1_PERSON:
-                m = obj_head.get_absolute_model();
+                m = mesh_head.get_absolute_model();
                 cameraPosition = vec3(m[3]);
                 dirf = normalize(vec3(m[0]));
                 cameraEye = cameraPosition + dirf;
-                cameraUp = vec3(obj_base.get_model()[1]);
+                cameraUp = vec3(mesh_base.get_model()[1]);
                 break;
         }
 
@@ -834,7 +900,7 @@ get_palo_vao(GLuint *vao, GLuint *indexes_n)
 static inline void
 get_ground_vao(GLuint *VAO, GLuint *indexes_n)
 {
-        square(VAO, indexes_n, 1000, 80);
+        square(VAO, indexes_n, 1000, 200);
 }
 
 static inline void
@@ -870,7 +936,7 @@ process_mouse(GLFWwindow *window)
         }
 
         float xoffset = xpos - lastX;
-        obj_base.rotate(MOUSE_SENS_X * (interframe_time) *xoffset, vec3(0, -1, 0));
+        mesh_base.rotate(MOUSE_SENS_X * (interframe_time) *xoffset, vec3(0, -1, 0));
         lastX = xpos;
 }
 
@@ -893,18 +959,13 @@ process_input(GLFWwindow *window)
                         // printf("SpeedUp %f\n", moveSpeed);
                 }
 
-                /* Check for collisions */
-                if (scene.scene_object_collisions(obj_base, scene.get_objects()).size() > 0) {
-                        moveSpeed = 0;
-                }
-
-                // move obj
-                obj_base.translate(vec3(moveSpeed, 0, 0));
+                // move mesh
+                mesh_base.translate(vec3(moveSpeed, 0, 0));
                 // rotate wheel
-                obj_w_fl.rotate(moveSpeed, vec3(0, 0, -1));
-                obj_w_fr.rotate(moveSpeed, vec3(0, 0, -1));
-                obj_w_bl.rotate(moveSpeed, vec3(0, 0, -1));
-                obj_w_br.rotate(moveSpeed, vec3(0, 0, -1));
+                mesh_w_fl.rotate(moveSpeed, vec3(0, 0, -1));
+                mesh_w_fr.rotate(moveSpeed, vec3(0, 0, -1));
+                mesh_w_bl.rotate(moveSpeed, vec3(0, 0, -1));
+                mesh_w_br.rotate(moveSpeed, vec3(0, 0, -1));
         }
 
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_RELEASE) {
@@ -913,18 +974,18 @@ process_input(GLFWwindow *window)
                         moveSpeed = 0;
                 } else {
                         // printf("SpeedDown %f\n", moveSpeed);
-                        //   move obj
-                        obj_base.translate(vec3(moveSpeed, 0, 0));
+                        //   move mesh
+                        mesh_base.translate(vec3(moveSpeed, 0, 0));
                         // rotate wheel
-                        obj_w_fl.rotate(moveSpeed, vec3(0, 0, -1));
-                        obj_w_fr.rotate(moveSpeed, vec3(0, 0, -1));
-                        obj_w_bl.rotate(moveSpeed, vec3(0, 0, -1));
-                        obj_w_br.rotate(moveSpeed, vec3(0, 0, -1));
+                        mesh_w_fl.rotate(moveSpeed, vec3(0, 0, -1));
+                        mesh_w_fr.rotate(moveSpeed, vec3(0, 0, -1));
+                        mesh_w_bl.rotate(moveSpeed, vec3(0, 0, -1));
+                        mesh_w_br.rotate(moveSpeed, vec3(0, 0, -1));
                 }
         }
 
         if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-                // move obj
+                // move mesh
                 if (moveSpeed > 0) {
                         moveSpeed -= moveDec;
                         if ((moveSpeed) < 0)
@@ -935,40 +996,40 @@ process_input(GLFWwindow *window)
                 } else {
                         moveSpeed = 100 * moveInc;
                         // printf("SpeedUp Reverse %f\n", moveSpeed);
-                        obj_base.translate(vec3(-moveSpeed, 0, 0));
+                        mesh_base.translate(vec3(-moveSpeed, 0, 0));
                         // rotate wheel
-                        obj_w_fl.rotate(moveSpeed, vec3(0, 0, 1));
-                        obj_w_fr.rotate(moveSpeed, vec3(0, 0, 1));
-                        obj_w_bl.rotate(moveSpeed, vec3(0, 0, 1));
-                        obj_w_br.rotate(moveSpeed, vec3(0, 0, 1));
+                        mesh_w_fl.rotate(moveSpeed, vec3(0, 0, 1));
+                        mesh_w_fr.rotate(moveSpeed, vec3(0, 0, 1));
+                        mesh_w_bl.rotate(moveSpeed, vec3(0, 0, 1));
+                        mesh_w_br.rotate(moveSpeed, vec3(0, 0, 1));
                         moveSpeed = 0;
                 }
         }
 
         if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-                obj_base.rotate(rotateSpeed, vec3(0, 1, 0));
+                mesh_base.rotate(rotateSpeed, vec3(0, 1, 0));
         }
 
         if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-                obj_base.rotate(rotateSpeed, vec3(0, -1, 0));
+                mesh_base.rotate(rotateSpeed, vec3(0, -1, 0));
         }
 
         if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) {
-                if (obj_rots.get_rotation().z < PIMED)
-                        obj_rots.rotate(rotateSpeed, vec3(0, 0, 1));
+                if (mesh_rots.get_rotation().z < PIMED)
+                        mesh_rots.rotate(rotateSpeed, vec3(0, 0, 1));
         }
 
         if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) {
-                if (obj_rots.get_rotation().z > -PIMED)
-                        obj_rots.rotate(rotateSpeed, vec3(0, 0, -1));
+                if (mesh_rots.get_rotation().z > -PIMED)
+                        mesh_rots.rotate(rotateSpeed, vec3(0, 0, -1));
         }
 
         if (glfwGetKey(window, GLFW_KEY_H) == GLFW_PRESS) {
-                obj_rotb.rotate(rotateSpeed, vec3(0, 1, 0));
+                mesh_rotb.rotate(rotateSpeed, vec3(0, 1, 0));
         }
 
         if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
-                obj_rotb.rotate(rotateSpeed, vec3(0, -1, 0));
+                mesh_rotb.rotate(rotateSpeed, vec3(0, -1, 0));
         }
 
         if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS && !c_lock) {
@@ -1011,17 +1072,17 @@ framebuffer_size_callback(GLFWwindow *, int width, int height)
 
 
 void
-set_light(Object *light1, Object *light2)
+set_light(Mesh *light1, Mesh *light2)
 {
         mat4 model = light1->get_absolute_model();
-        vec3 local_light_pos = vec3(0.0f, 0.0f, 0.0f); // Posición relativa dentro del objeto
+        vec3 local_light_pos = vec3(0.0f, 0.0f, 0.0f); // Posición relativa dentro del mesheto
         lightPos = vec3(model * vec4(local_light_pos, 1.0f)); // Aplicar la transformación completa
         vec3 dirf = normalize(vec3(model[0]));
         glUniform3fv(glGetUniformLocation(light1->get_shader(), "lightPos1"), 1, value_ptr(lightPos));
         glUniform3fv(glGetUniformLocation(light1->get_shader(), "lightDir1"), 1, value_ptr(dirf));
 
         model = light2->get_absolute_model();
-        local_light_pos = vec3(0.0f, 0.0f, 0.0f); // Posición relativa dentro del objeto
+        local_light_pos = vec3(0.0f, 0.0f, 0.0f); // Posición relativa dentro del mesheto
         lightPos = vec3(model * vec4(local_light_pos, 1.0f)); // Aplicar la transformación completa
         dirf = normalize(vec3(model[0]));
         glUniform3fv(glGetUniformLocation(light1->get_shader(), "lightPos2"), 1, value_ptr(lightPos));
@@ -1072,6 +1133,9 @@ fps()
         }
 }
 
+Object grua = Object();
+Object forest = Object();
+
 /* Main loop. Executed until window is closed. */
 int
 mainloop(GLFWwindow *window)
@@ -1087,23 +1151,9 @@ mainloop(GLFWwindow *window)
                 glClear(GL_COLOR_BUFFER_BIT);
                 glClear(GL_DEPTH_BUFFER_BIT);
 
-                set_light(&obj_ls_1, &obj_ls_2);
+                set_light(&mesh_ls_1, &mesh_ls_2);
 
-                obj_grnd.draw_object();
-                obj_cube.draw_object();
-                obj_base.draw_object();
-                /* Every object attached to obj_base is automatically drawn */
-
-                obj_tre1.draw_object();
-                obj_tre2.draw_object();
-                obj_tre3.draw_object();
-                obj_tre4.draw_object();
-                obj_tre5.draw_object();
-                obj_tre6.draw_object();
-                obj_tre7.draw_object();
-                obj_tre8.draw_object();
-                obj_tre9.draw_object();
-                obj_tre0.draw_object();
+                scene.draw();
 
                 glfwSwapBuffers(window);
         }
@@ -1205,15 +1255,15 @@ $({ )
 
     $(if (texture_count> 0))
     $({ )
-        $(vec4 texColor = vec4(0, 0, 0, 0);)
+        $(vec4 texColor = vec4(1, 1, 1, 1);)
         $(for (int i = 0; i<texture_count; i ++))
         $({ )
             $(switch (i))
             $({ )
-                $(case 0 : texColor += texture(textures[0], TexCoord); break;)
-                $(case 1 : texColor += texture(textures[1], TexCoord); break;)
-                $(case 2 : texColor += texture(textures[2], TexCoord); break;)
-                $(case 3 : texColor += texture(textures[3], TexCoord); break;)
+                $(case 0 : texColor *= texture(textures[0], TexCoord); break;)
+                $(case 1 : texColor *= texture(textures[1], TexCoord); break;)
+                $(case 2 : texColor *= texture(textures[2], TexCoord); break;)
+                $(case 3 : texColor *= texture(textures[3], TexCoord); break;)
                 $( })
             $( })
         $(if (texColor.a<0.1))
@@ -1230,138 +1280,136 @@ $({ )
 
 
 void
-init_object_vector(vector<Object *> &objs)
-{
-        for (auto o : objs) {
-                o->init();
-        }
-}
-
-void
-look_to_camera(Object *self)
+look_to_camera(Mesh *self)
 {
         self->look_at(cameraPosition);
 }
 
-Object obj_grnd = Object("ground", get_ground_vao);
-Object obj_base = Object("base", get_base_vao);
-Object obj_head = Object("head", get_head_vao);
-Object obj_w_fl = Object("wheel_fl", get_wheel_vao, 0x444444);
-Object obj_w_fr = Object("wheel_fr", get_wheel_vao, 0x444444);
-Object obj_w_bl = Object("wheel_bl", get_wheel_vao, 0x444444);
-Object obj_w_br = Object("wheel_br", get_wheel_vao, 0x444444);
-Object obj_rotb = Object("circle_base", get_sphere_base_vao);
-Object obj_rots = Object("circle", get_sphere_vao);
-Object obj_palo = Object("palo", get_palo_vao);
-Object obj_cube = Object("A", get_A_vao, 0xAACC00);
-Object obj_ls_1 = Object("Light Spot 1", get_lightspot_vao, 0xFFFFFF, false); // light spot (where light is placed)
-Object obj_ls_2 = Object("Light Spot 2", get_lightspot_vao, 0xFFFFFF, false);
-Object obj_tre1 = Object("tree1", get_tree_vao);
-Object obj_tre2 = Object("tree2", get_tree_vao);
-Object obj_tre3 = Object("tree3", get_tree_vao);
-Object obj_tre4 = Object("tree4", get_tree_vao);
-Object obj_tre5 = Object("tree5", get_tree_vao);
-Object obj_tre6 = Object("tree6", get_tree_vao);
-Object obj_tre7 = Object("tree7", get_tree_vao);
-Object obj_tre8 = Object("tree8", get_tree_vao);
-Object obj_tre9 = Object("tree9", get_tree_vao);
-Object obj_tre0 = Object("tree10", get_tree_vao);
+Mesh mesh_grnd = Mesh("ground", get_ground_vao);
+Mesh mesh_base = Mesh("base", get_base_vao);
+Mesh mesh_head = Mesh("head", get_head_vao);
+Mesh mesh_w_fl = Mesh("wheel_fl", get_wheel_vao, 0x444444);
+Mesh mesh_w_fr = Mesh("wheel_fr", get_wheel_vao, 0x444444);
+Mesh mesh_w_bl = Mesh("wheel_bl", get_wheel_vao, 0x444444);
+Mesh mesh_w_br = Mesh("wheel_br", get_wheel_vao, 0x444444);
+Mesh mesh_rotb = Mesh("circle_base", get_sphere_base_vao);
+Mesh mesh_rots = Mesh("circle", get_sphere_vao);
+Mesh mesh_palo = Mesh("palo", get_palo_vao);
+Mesh mesh_cube = Mesh("A", get_A_vao, 0xAACC00);
+Mesh mesh_ls_1 = Mesh("Light Spot 1", get_lightspot_vao, 0xFFFFFF, false); // light spot (where light is placed)
+Mesh mesh_ls_2 = Mesh("Light Spot 2", get_lightspot_vao, 0xFFFFFF, false);
+Mesh mesh_tre1 = Mesh("tree1", get_tree_vao);
+Mesh mesh_tre2 = Mesh("tree2", get_tree_vao);
+Mesh mesh_tre3 = Mesh("tree3", get_tree_vao);
+Mesh mesh_tre4 = Mesh("tree4", get_tree_vao);
+Mesh mesh_tre5 = Mesh("tree5", get_tree_vao);
+Mesh mesh_tre6 = Mesh("tree6", get_tree_vao);
+Mesh mesh_tre7 = Mesh("tree7", get_tree_vao);
+Mesh mesh_tre8 = Mesh("tree8", get_tree_vao);
+Mesh mesh_tre9 = Mesh("tree9", get_tree_vao);
+Mesh mesh_tre0 = Mesh("tree10", get_tree_vao);
+
 
 void
-init_objects()
+init_scene()
 {
         GLuint shader_program = setShaders_str(vertex_shader, fragment_shader);
         assert(shader_program > 0);
 
-        obj_grnd.add_material_image("./textures/StripedAsphalt/Striped_Asphalt_ufoidcskw_1K_BaseColor.jpg");
-        obj_grnd.add_material_image("./textures/random_texture_maps/ALPHA_090.png");
-        obj_palo.add_material_image("./textures/bluePlastic/Scratched_Polypropylene_Plastic_schbehmp_1K_BaseColor.jpg");
-        obj_base.add_material_image("./textures/marbleCheckeredFloor/Marble_Checkered_Floor_sescnen_1K_BaseColor.jpg");
-        obj_tre1.add_material_image("./textures/tree2d.png");
-        obj_head.set_material(obj_base.get_material());
-        obj_rotb.set_material(obj_palo.get_material());
-        obj_rots.set_material(obj_palo.get_material());
-        obj_tre2.set_material(obj_tre1.get_material());
-        obj_tre3.set_material(obj_tre1.get_material());
-        obj_tre4.set_material(obj_tre1.get_material());
-        obj_tre5.set_material(obj_tre1.get_material());
-        obj_tre6.set_material(obj_tre1.get_material());
-        obj_tre7.set_material(obj_tre1.get_material());
-        obj_tre8.set_material(obj_tre1.get_material());
-        obj_tre9.set_material(obj_tre1.get_material());
-        obj_tre0.set_material(obj_tre1.get_material());
+        /* FOREST (10 arboles) */
+        forest.add_mesh(&mesh_tre1);
+        forest.add_mesh(&mesh_tre2);
+        forest.add_mesh(&mesh_tre3);
+        forest.add_mesh(&mesh_tre4);
+        forest.add_mesh(&mesh_tre5);
+        forest.add_mesh(&mesh_tre6);
+        forest.add_mesh(&mesh_tre7);
+        forest.add_mesh(&mesh_tre8);
+        forest.add_mesh(&mesh_tre9);
+        forest.add_mesh(&mesh_tre0);
+        forest.set_before_draw_function(look_to_camera);
+        forest.set_shader(shader_program);
+        forest.add_material_image("./textures/tree2d.png");
+        mesh_tre2.add_material_image("./textures/random_texture_maps/ALPHA_008.png");
+        mesh_tre3.add_material_image("./textures/random_texture_maps/ALPHA_090.png");
+        mesh_tre4.add_material_image("./textures/random_texture_maps/ALPHA_146.png");
+        mesh_tre5.add_material_image("./textures/random_texture_maps/ALPHA_224.png");
+        mesh_tre6.add_material_image("./textures/random_texture_maps/ALPHA_252.png");
+        mesh_tre7.add_material_image("./textures/random_texture_maps/ALPHA_372.png");
+        mesh_tre8.add_material_image("./textures/random_texture_maps/ALPHA_385.png");
+        mesh_tre9.add_material_image("./textures/random_texture_maps/ALPHA_405.png");
+        mesh_tre0.add_material_image("./textures/random_texture_maps/ALPHA_458.png");
 
-        obj_cube.translate(vec3(6.0, 3, 0.0));
-        obj_base.rotate(PIMED, vec3(0.0, 1.0, 0.0));
-        obj_base.translate(vec3(0.0, 1.39, 0.0));
-        obj_head.translate(vec3(2.75, 2.0, 0.0));
-        obj_w_fl.translate(vec3(2.5, -0.75, -1.5));
-        obj_w_fr.translate(vec3(2.5, -0.75, +1.5));
-        obj_w_bl.translate(vec3(-2.5, -0.75, -1.5));
-        obj_w_br.translate(vec3(-2.5, -0.75, +1.5));
-        obj_rotb.translate(vec3(-1.0, 0.75, 0.0));
-        obj_rots.translate(vec3(0.0, 0.5, 0.0));
-        obj_palo.translate(vec3(0.0, 2.75, 0.0));
-        obj_ls_1.translate(vec3(0.0, 0.0, -1.0));
-        obj_ls_2.translate(vec3(0.0, 0.0, +1.0));
+        /* GRUA */
+        grua.add_mesh(&mesh_base);
+        grua.add_mesh(&mesh_head);
+        grua.add_mesh(&mesh_w_fl);
+        grua.add_mesh(&mesh_w_fr);
+        grua.add_mesh(&mesh_w_bl);
+        grua.add_mesh(&mesh_w_br);
+        grua.add_mesh(&mesh_rotb);
+        grua.add_mesh(&mesh_rots);
+        grua.add_mesh(&mesh_palo);
+        grua.add_mesh(&mesh_ls_1);
+        grua.add_mesh(&mesh_ls_2);
+        grua.set_shader(shader_program);
+        mesh_palo.add_material_image("./textures/bluePlastic/Scratched_Polypropylene_Plastic_schbehmp_1K_BaseColor.jpg");
+        mesh_base.add_material_image("./textures/marbleCheckeredFloor/Marble_Checkered_Floor_sescnen_1K_BaseColor.jpg");
+        mesh_head.set_material(mesh_base.get_material());
+        mesh_rotb.set_material(mesh_palo.get_material());
+        mesh_rots.set_material(mesh_palo.get_material());
+        mesh_base.attach(&mesh_head);
+        mesh_base.attach(&mesh_w_fl);
+        mesh_base.attach(&mesh_w_fr);
+        mesh_base.attach(&mesh_w_bl);
+        mesh_base.attach(&mesh_w_br);
+        mesh_base.attach(&mesh_rotb);
+        mesh_rotb.attach(&mesh_rots);
+        mesh_rots.attach(&mesh_palo);
+        mesh_head.attach(&mesh_ls_1);
+        mesh_head.attach(&mesh_ls_2);
 
-        obj_tre1.rotate(PI, vec3(0.0, 0.0, 1.0)).rotate(PIMED, vec3(1.0, 0.0, 0.0));
-        obj_tre2.set_model(obj_tre1.get_model()).translate(vec3(12.0, 4.0, 4.0));
-        obj_tre3.set_model(obj_tre1.get_model()).translate(vec3(18.0, 4.0, 4.0));
-        obj_tre4.set_model(obj_tre1.get_model()).translate(vec3(24.0, 4.0, 4.0));
-        obj_tre5.set_model(obj_tre1.get_model()).translate(vec3(30.0, 4.0, 4.0));
-        obj_tre6.set_model(obj_tre1.get_model()).translate(vec3(36.0, 4.0, 4.0));
-        obj_tre7.set_model(obj_tre1.get_model()).translate(vec3(42.0, 4.0, 4.0));
-        obj_tre8.set_model(obj_tre1.get_model()).translate(vec3(48.0, 4.0, 4.0));
-        obj_tre9.set_model(obj_tre1.get_model()).translate(vec3(54.0, 4.0, 4.0));
-        obj_tre0.set_model(obj_tre1.get_model()).translate(vec3(60.0, 4.0, 4.0));
-        obj_tre1.translate(vec3(06.0, 4.0, 4.0));
+        /* INITIAL POSITION */
+        mesh_cube.translate(vec3(6.0, 3, 0.0));
+        mesh_base.rotate(PIMED, vec3(0.0, 1.0, 0.0));
+        mesh_base.translate(vec3(0.0, 1.39, 0.0));
+        mesh_head.translate(vec3(2.75, 2.0, 0.0));
+        mesh_w_fl.translate(vec3(2.5, -0.75, -1.5));
+        mesh_w_fr.translate(vec3(2.5, -0.75, +1.5));
+        mesh_w_bl.translate(vec3(-2.5, -0.75, -1.5));
+        mesh_w_br.translate(vec3(-2.5, -0.75, +1.5));
+        mesh_rotb.translate(vec3(-1.0, 0.75, 0.0));
+        mesh_rots.translate(vec3(0.0, 0.5, 0.0));
+        mesh_palo.translate(vec3(0.0, 2.75, 0.0));
+        mesh_ls_1.translate(vec3(0.0, 0.0, -1.0));
+        mesh_ls_2.translate(vec3(0.0, 0.0, +1.0));
 
-        obj_tre1.set_before_draw_function(look_to_camera);
-        obj_tre2.set_before_draw_function(look_to_camera);
-        obj_tre3.set_before_draw_function(look_to_camera);
-        obj_tre4.set_before_draw_function(look_to_camera);
-        obj_tre5.set_before_draw_function(look_to_camera);
-        obj_tre6.set_before_draw_function(look_to_camera);
-        obj_tre7.set_before_draw_function(look_to_camera);
-        obj_tre8.set_before_draw_function(look_to_camera);
-        obj_tre9.set_before_draw_function(look_to_camera);
-        obj_tre0.set_before_draw_function(look_to_camera);
+        forest.rotate(PI, vec3(0.0, 0.0, 1.0));
+        forest.rotate(PIMED, vec3(1.0, 0.0, 0.0));
+        mesh_tre2.translate(vec3(12.0, 3.0, 3.0));
+        mesh_tre3.translate(vec3(18.0, 3.0, 3.0));
+        mesh_tre4.translate(vec3(24.0, 3.0, 3.0));
+        mesh_tre5.translate(vec3(30.0, 3.0, 3.0));
+        mesh_tre6.translate(vec3(36.0, 3.0, 3.0));
+        mesh_tre7.translate(vec3(42.0, 3.0, 3.0));
+        mesh_tre8.translate(vec3(48.0, 3.0, 3.0));
+        mesh_tre9.translate(vec3(54.0, 3.0, 3.0));
+        mesh_tre0.translate(vec3(60.0, 3.0, 3.0));
+        mesh_tre1.translate(vec3(06.0, 3.0, 3.0));
 
-        obj_base.attach(&obj_head);
-        obj_base.attach(&obj_w_fl);
-        obj_base.attach(&obj_w_fr);
-        obj_base.attach(&obj_w_bl);
-        obj_base.attach(&obj_w_br);
-        obj_base.attach(&obj_rotb);
-        obj_rotb.attach(&obj_rots);
-        obj_rots.attach(&obj_palo);
-        obj_head.attach(&obj_ls_1);
-        obj_head.attach(&obj_ls_2);
+        /* Ground */
+        mesh_grnd.add_material_image("./textures/grass_and_rubble/Grass_And_Rubble_pjwey0_1K_BaseColor.jpg");
+        mesh_grnd.add_material_image("./textures/random_texture_maps/ALPHA_239.png");
+        mesh_grnd.set_shader(shader_program);
 
-        obj_grnd.set_shader(shader_program).init();
-        obj_base.set_shader(shader_program).init();
-        obj_head.set_shader(shader_program).init();
-        obj_w_fl.set_shader(shader_program).init();
-        obj_w_fr.set_shader(shader_program).init();
-        obj_w_bl.set_shader(shader_program).init();
-        obj_w_br.set_shader(shader_program).init();
-        obj_rotb.set_shader(shader_program).init();
-        obj_rots.set_shader(shader_program).init();
-        obj_palo.set_shader(shader_program).init();
-        obj_cube.set_shader(shader_program).init();
-        obj_ls_1.set_shader(shader_program).init();
-        obj_ls_2.set_shader(shader_program).init();
-        obj_tre1.set_shader(shader_program).init();
-        obj_tre2.set_shader(shader_program).init();
-        obj_tre3.set_shader(shader_program).init();
-        obj_tre4.set_shader(shader_program).init();
-        obj_tre5.set_shader(shader_program).init();
-        obj_tre6.set_shader(shader_program).init();
-        obj_tre7.set_shader(shader_program).init();
-        obj_tre8.set_shader(shader_program).init();
-        obj_tre9.set_shader(shader_program).init();
-        obj_tre0.set_shader(shader_program).init();
+        /* cube */
+        mesh_cube.set_shader(shader_program);
+
+        scene.add_mesh(&mesh_cube);
+        scene.add_mesh(&mesh_grnd);
+        scene.add_object(&grua);
+        scene.add_object(&forest);
+        scene.init();
 }
 
 
@@ -1435,7 +1483,7 @@ main()
 
         show_help();
 
-        init_objects();
+        init_scene();
         mainloop(window);
 
         glfwDestroyWindow(window);
