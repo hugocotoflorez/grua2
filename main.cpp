@@ -20,6 +20,8 @@
 /* Enable VSync. FPS limited to screen refresh rate
  * (0: disable, 1: enable, undef: default) */
 #include <cstdlib>
+#include <glm/geometric.hpp>
+#include <string>
 #define VSYNC 0
 
 /* Mouse sensibility */
@@ -111,14 +113,14 @@ class Material
     public:
         const char *name;
         float Ns = 200.0f; // Brillo especular
-        float Ka[3] = { 0.2f, 0.2f, 0.2f }; // Luz ambiental
-        float Ks[3] = { 0.4f, 0.4f, 0.4f }; // Reflectividad especular
+        float Ka[3] = { .2f, .2f, .2f }; // Luz ambiental
+        float Ks[3] = { .4f, .4f, .4f }; // Reflectividad especular
         float Kd[3] = { 20.8f, 20.8f, 20.8f }; // Color difuso
-        float Ke[3] = { 0.0f, 0.0f, 0.0f }; // Emisión (ninguna)
+        float Ke[3] = { .0f, .0f, .0f }; // Emisión (ninguna)
         float Ni = 1.0f; // Índice de refracción
         float d = 1.0f; // Opacidad
         unsigned int illum = 0;
-        unsigned int texture = 0;
+        vector<unsigned int> textures;
         unsigned char *image = NULL;
         int height = 0;
         int width = 0;
@@ -133,16 +135,11 @@ class Material
         GLuint
         load_texture(int how = 0)
         {
-                if (texture > 0) {
-                        // printf("Texture loaded yet\n");
-                        return texture;
-                }
-
+                unsigned int texture;
                 if (image == NULL) {
-                        // printf("Material has no image data!\n");
+                        printf("[ERROR] Material has no image data!\n");
                         return 0;
                 }
-                // printf("loading texture\n");
                 glGenTextures(1, &texture);
                 glBindTexture(GL_TEXTURE_2D, texture);
 
@@ -159,7 +156,7 @@ class Material
                 glBindTexture(GL_TEXTURE_2D, 0);
 
                 assert(texture > 0);
-                // printf("texture loaded\n");
+                textures.push_back(texture);
                 return texture;
         }
 
@@ -344,21 +341,25 @@ class Object
                 GLint colorLoc;
                 GLint textureLoc;
                 colorLoc = glGetUniformLocation(shader_program, "color");
-                textureLoc = glGetUniformLocation(shader_program, "texture1");
+                glUniform1i(glGetUniformLocation(shader_program, "useTexture"), material.textures.size() > 0);
+                glUniform1i(glGetUniformLocation(shader_program, "texture_count"), material.textures.size());
                 if (colorLoc != -1)
                         glUniform3f(colorLoc, HexColor(color));
 
-                glUniform1i(glGetUniformLocation(shader_program, "useTexture"), material.texture != 0);
-                if (textureLoc != -1 && glIsTexture(material.texture)) {
-                        // printf("Using texture %d\n",material.texture);
-                        glEnable(GL_TEXTURE_2D);
-                        glActiveTexture(GL_TEXTURE0);
-                        glUniform1i(textureLoc, 0);
-                        glBindTexture(GL_TEXTURE_2D, material.texture);
+                for (int i = 0; i < material.textures.size(); ++i) {
+                        unsigned int texture = material.textures.at(i);
+                        if (glIsTexture(texture)) {
+                                // printf("Using texture %d\n",material.texture);
+                                glEnable(GL_TEXTURE_2D);
+                                glActiveTexture(GL_TEXTURE0 + i);
+                                textureLoc = glGetUniformLocation(shader_program, ("textures[" + std::to_string(i) + "]").c_str());
+                                glUniform1i(textureLoc, i);
+                                glBindTexture(GL_TEXTURE_2D, texture);
 
-                } else if (material.texture != 0) {
-                        printf("Texture %d failed!\n", material.texture);
-                        exit(material.texture);
+                        } else if (texture != 0) {
+                                printf("Texture %d failed!\n", texture);
+                                exit(texture);
+                        }
                 }
         }
 
@@ -387,6 +388,7 @@ class Object
                 glUniformMatrix4fv(glGetUniformLocation(shader_program, "model"), 1, GL_FALSE, value_ptr(_model));
 
                 glBindVertexArray(vao);
+                glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
                 glDrawElements(GL_TRIANGLES, indexes_n, GL_UNSIGNED_INT, 0);
 
                 glBindVertexArray(0);
@@ -402,6 +404,16 @@ class Object
                 attached.push_back(child);
                 child->parent = this;
                 // printf("Vec Size after attach: %zd\n", attached.size());
+        }
+
+        bool collide(Object o)
+        {
+                vec3 self_pos = get_obj_absolute_position();
+                vec3 obj_pos = o.get_obj_absolute_position();
+                self_pos.y = 0;
+                obj_pos.y = 0;
+                float dist = glm::distance(self_pos, obj_pos);
+                return false;
         }
 
         void
@@ -422,6 +434,42 @@ class Object
                 return this;
         }
 };
+
+class Scene
+{
+    private:
+        vector<Object> objects;
+
+    public:
+        Scene()
+        {
+        }
+
+        vector<Object> scene_object_collisions(Object obj, vector<Object> other)
+        {
+                vector<Object> collisions;
+                for (auto o : other) {
+                        if (o.collide(obj))
+                                collisions.push_back(o);
+                }
+                for (auto c : collisions)
+                        printf("%s collide with %s\n", obj.get_name(), c.get_name());
+                return collisions;
+        }
+
+        vector<Object> get_objects()
+        {
+                return objects;
+        }
+
+        Scene &add_object(Object &o)
+        {
+                objects.push_back(o);
+                return *this;
+        }
+};
+
+static Scene scene = Scene();
 
 extern Object obj_grnd;
 extern Object obj_base;
@@ -844,6 +892,12 @@ process_input(GLFWwindow *window)
                         moveSpeed += moveInc;
                         // printf("SpeedUp %f\n", moveSpeed);
                 }
+
+                /* Check for collisions */
+                if (scene.scene_object_collisions(obj_base, scene.get_objects()).size() > 0) {
+                        moveSpeed = 0;
+                }
+
                 // move obj
                 obj_base.translate(vec3(moveSpeed, 0, 0));
                 // rotate wheel
@@ -974,7 +1028,6 @@ set_light(Object *light1, Object *light2)
         glUniform3fv(glGetUniformLocation(light1->get_shader(), "lightDir2"), 1, value_ptr(dirf));
 
         vec3 viewPos = cameraPosition;
-        // printf("Light pos: %f, %f, %f\n", lightPos.x, lightPos.y, lightPos.z);
         glUniform3fv(glGetUniformLocation(light1->get_shader(), "viewPos"), 1, value_ptr(viewPos));
         glUniform3fv(glGetUniformLocation(light1->get_shader(), "lightColor"), 1, value_ptr(lightColor * lightIntensity));
         glUniform3fv(glGetUniformLocation(light1->get_shader(), "Ka"), 1, light1->get_material().Ka);
@@ -1008,8 +1061,6 @@ fps()
         ++fps;
 
         interframe_time = tp.tv_sec - last_tp.tv_sec + (tp.tv_nsec - last_tp.tv_nsec) * 1e-9;
-        // printf("interframe_time: %f\n", interframe_time);
-
         last_tp = tp;
 
         if (t - last_time >= 1) {
@@ -1036,7 +1087,6 @@ mainloop(GLFWwindow *window)
                 glClear(GL_COLOR_BUFFER_BIT);
                 glClear(GL_DEPTH_BUFFER_BIT);
 
-                glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
                 set_light(&obj_ls_1, &obj_ls_2);
 
                 obj_grnd.draw_object();
@@ -1104,8 +1154,8 @@ $(uniform vec3 Ka;)
 $(uniform vec3 Kd;)
 $(uniform vec3 viewPos;)
 $(uniform vec3 color;)
-$(uniform sampler2D texture1;)
-$(uniform int useTexture;)
+$(uniform sampler2D textures[16];)
+$(uniform int texture_count;)
 
 $(void)
 $(main())
@@ -1122,7 +1172,7 @@ $({ )
     $(float distance1 = length(lightPos1 - FragPos);)
     $(float distance2 = length(lightPos2 - FragPos);)
 
-    $(float Kc = 2.0;)
+    $(float Kc = 50.0;)
     $(float Kl = 1.2;)
     $(float Kq = 0.09;)
 
@@ -1153,9 +1203,19 @@ $({ )
         $(specular = specularStrength * spec * lightColor * attenuation1;)
         $( })
 
-    $(if (useTexture == 1))
+    $(if (texture_count> 0))
     $({ )
-        $(vec4 texColor = texture(texture1, TexCoord);)
+        $(vec4 texColor = vec4(0, 0, 0, 0);)
+        $(for (int i = 0; i<texture_count; i ++))
+        $({ )
+            $(switch (i))
+            $({ )
+                $(case 0 : texColor += texture(textures[0], TexCoord); break;)
+                $(case 1 : texColor += texture(textures[1], TexCoord); break;)
+                $(case 2 : texColor += texture(textures[2], TexCoord); break;)
+                $(case 3 : texColor += texture(textures[3], TexCoord); break;)
+                $( })
+            $( })
         $(if (texColor.a<0.1))
         $({ )
             $(discard;)
@@ -1214,6 +1274,7 @@ init_objects()
         assert(shader_program > 0);
 
         obj_grnd.add_material_image("./textures/StripedAsphalt/Striped_Asphalt_ufoidcskw_1K_BaseColor.jpg");
+        obj_grnd.add_material_image("./textures/random_texture_maps/ALPHA_090.png");
         obj_palo.add_material_image("./textures/bluePlastic/Scratched_Polypropylene_Plastic_schbehmp_1K_BaseColor.jpg");
         obj_base.add_material_image("./textures/marbleCheckeredFloor/Marble_Checkered_Floor_sescnen_1K_BaseColor.jpg");
         obj_tre1.add_material_image("./textures/tree2d.png");
